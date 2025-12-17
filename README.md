@@ -146,8 +146,3 @@ MIT License — Free to use, modify, and distribute.
 
 ---
 
-## 🙏 Credits
-
-Created by **Bo Chen** (bochen2079)
-
-Built with assistance from **Claude** (Anthropic)
