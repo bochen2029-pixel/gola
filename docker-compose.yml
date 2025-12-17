@@ -1,0 +1,110 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GOLA v7.2 — Docker Compose Configuration
+# Orchestrates the game container with security hardening
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # GOLA GAME SERVER
+  # ─────────────────────────────────────────────────────────────────────────────
+  gola:
+    build: .
+    container_name: gola-game
+    
+    # Port mapping: host:container
+    ports:
+      - "8080:8080"
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # ───────────────────────────────────────────────────────────────────────────
+    # SECURITY HARDENING
+    # ───────────────────────────────────────────────────────────────────────────
+    
+    # Read-only root filesystem
+    read_only: true
+    
+    # Prevent privilege escalation
+    security_opt:
+      - no-new-privileges:true
+    
+    # Drop all Linux capabilities
+    cap_drop:
+      - ALL
+    
+    # Temporary filesystems for nginx runtime (required)
+    tmpfs:
+      - /var/cache/nginx:uid=1001,gid=1001,mode=755
+      - /var/run:uid=1001,gid=1001,mode=755
+    
+    # Resource limits (prevent container from consuming too much)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    # ───────────────────────────────────────────────────────────────────────────
+    # LOGGING
+    # ───────────────────────────────────────────────────────────────────────────
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUTURE EXPANSION (uncomment when adding backend)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#   api:
+#     build: ./backend
+#     container_name: gola-api
+#     ports:
+#       - "3000:3000"
+#     environment:
+#       - NODE_ENV=production
+#     networks:
+#       - gola-internal
+#     depends_on:
+#       - db
+#
+#   db:
+#     image: postgres:15-alpine
+#     container_name: gola-db
+#     environment:
+#       POSTGRES_DB: gola
+#       POSTGRES_USER: gola
+#       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+#     volumes:
+#       - gola-data:/var/lib/postgresql/data
+#     networks:
+#       - gola-internal
+#     secrets:
+#       - db_password
+#
+# networks:
+#   gola-internal:
+#     driver: bridge
+#     internal: true
+#
+# volumes:
+#   gola-data:
+#
+# secrets:
+#   db_password:
+#     file: ./secrets/db_password.txt

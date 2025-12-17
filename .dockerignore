@@ -1,0 +1,51 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GOLA — Docker Ignore
+# Files to exclude from Docker build context (makes builds faster)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Git
+.git
+.gitignore
+
+# GitHub
+.github
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Scripts (not needed in container)
+install.ps1
+
+# IDE/Editor
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+secrets/
+.env*
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Node (future)
+node_modules/
+
+# Python (future)
+__pycache__/
+venv/
+.venv/
+
+# Local testing
+test/
+tmp/
+temp/

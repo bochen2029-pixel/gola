@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GOLA — Git Ignore
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Secrets (NEVER commit these!)
+secrets/
+*.pem
+*.key
+.env
+.env.local
+.env.*.local
+
+# Node (future backend)
+node_modules/
+npm-debug.log*
+
+# Python (future backend)
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Docker
+.docker/
+
+# Local testing
+test/
+tmp/
+temp/
