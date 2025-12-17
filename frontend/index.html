@@ -1,1 +1,2813 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+═══════════════════════════════════════════════════════════════════════════════
+GOLA v7.2 — Reality Checker
+Game of Life Automation - Organ Procurement Organization Simulation
+═══════════════════════════════════════════════════════════════════════════════
 
+VERSION HISTORY:
+────────────────────────────────────────────────────────────────────────────────
+v7.2 (Current) - Bug Fixes & UX Improvements
+────────────────────────────────────────────────────────────────────────────────
+  BUG FIXES:
+  • Fixed AI messaging "Connection failed" error - was extracting from wrong 
+    response field (message.reasoning vs message.content for reasoning models)
+  • Changed default model from zai-glm-4.6 (Chinese) to qwen-3-235b-a22b-instruct
+  • Added "Respond in English" to all AI prompts
+  • Fixed dead characters still appearing in dialogue dropdowns
+  • Fixed terminated characters still selectable (now properly disabled)
+  • Improved death/termination detection to match character ROLES not just names
+    (e.g., "legal officer died" now correctly finds Kevin Patel)
+  • Case ballooning fix improved - more aggressive cleanup (48h vs 120h)
+  • Case generation reduced from 3-8 to 1-3 per cycle, scaled by caseload
+  • Initial cases reduced from 15 to 10
+
+  UX IMPROVEMENTS:
+  • Log panel now has max-height (300px) with scrollbar - no more infinite page
+  • Cases panel now has max-height (400px) with scrollbar
+  • Dialogue responses now differentiate based on WHO is speaking
+    (CEO calling you vs peer calling you = different response tone)
+  • Dead characters set to employed=false as well (logical consistency)
+  • Dropdown refreshes immediately after character death/termination
+
+────────────────────────────────────────────────────────────────────────────────
+v7.1 - IT Infrastructure & Game History
+────────────────────────────────────────────────────────────────────────────────
+  • IT Infrastructure Tiers (Level 0-4) with economic constraints
+  • Game History tracking for Reality Checker long-range coherence
+  • Relationship History & Trends (snapshotRelationships, getRelationshipTrend)
+  • Knowledge Drain mechanics when employees leave
+  • Fixed localStorage bug overriding hardcoded API key defaults
+  • Initial case cleanup bug fix (lost cases now have lostQ timestamp)
+
+────────────────────────────────────────────────────────────────────────────────
+v7.0 - Reality Checker Foundation
+────────────────────────────────────────────────────────────────────────────────
+  • Reality Checker QC layer for realism enforcement
+  • Relationship Matrix between all characters
+  • Emotional state system for characters
+  • Enhanced dialogue system with trust changes
+  • World events tracking
+
+═══════════════════════════════════════════════════════════════════════════════
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GOLA v7.2 — Reality Checker</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Orbitron:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary-dark: #0a1628; --surface-dark: #0d1f33; --surface-mid: #1a3a52; --primary-blue: #00d4ff; --accent-teal: #00ffcc; --accent-amber: #ffaa00; --accent-gold: #ffd700; --accent-red: #ff4444; --accent-green: #44ff88; --accent-purple: #bb88ff; --accent-pink: #ff88cc; --text-primary: #e8f4f8; --text-secondary: #a0b0c0; --border-glow: rgba(0, 212, 255, 0.3); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'JetBrains Mono', monospace; background: var(--primary-dark); color: var(--text-primary); min-height: 100vh; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes sosFlash { 0%, 100% { background: rgba(255,68,68,0.15); } 50% { background: rgba(255,68,68,0.4); } }
+        @keyframes checkerPulse { 0%, 100% { border-color: var(--accent-purple); } 50% { border-color: var(--accent-pink); } }
+
+        #title-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--primary-dark); z-index: 1000; }
+        .title-main { font-family: 'Orbitron', sans-serif; font-size: 4rem; font-weight: 700; color: var(--primary-blue); text-shadow: 0 0 40px rgba(0, 212, 255, 0.6); }
+        .title-sub { font-family: 'Orbitron', sans-serif; font-size: 1.3rem; letter-spacing: 0.5rem; opacity: 0.9; margin-top: 8px; }
+        .title-version { color: var(--accent-purple); margin-top: 12px; font-size: 0.8rem; }
+        .title-input { max-width: 380px; margin: 25px auto; padding: 18px; background: rgba(13, 31, 51, 0.6); border: 1px solid var(--border-glow); }
+        .title-input input { width: 100%; padding: 10px; background: rgba(0, 212, 255, 0.1); border: 1px solid var(--primary-blue); color: var(--text-primary); font-family: inherit; }
+        .title-buttons { display: flex; gap: 12px; margin-top: 25px; }
+        .title-btn { font-family: 'Orbitron', sans-serif; padding: 12px 35px; border: 2px solid var(--primary-blue); background: rgba(0, 212, 255, 0.1); color: var(--primary-blue); cursor: pointer; }
+        .title-btn:hover { background: var(--primary-blue); color: var(--primary-dark); }
+        .title-btn.secondary { border-color: var(--text-secondary); color: var(--text-secondary); }
+
+        #game-container { display: none; min-height: 100vh; padding: 8px; }
+        .game-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(13, 31, 51, 0.95); border: 1px solid var(--border-glow); margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+        .header-title { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; color: var(--primary-blue); }
+        .header-stats { display: flex; gap: 12px; flex-wrap: wrap; }
+        .stat { text-align: center; min-width: 55px; }
+        .stat-label { font-size: 0.5rem; color: var(--text-secondary); text-transform: uppercase; }
+        .stat-value { font-size: 0.85rem; font-weight: 600; color: var(--primary-blue); }
+        .stat-value.danger { color: var(--accent-red); animation: pulse 1s infinite; }
+        .stat-value.warning { color: var(--accent-amber); }
+        .stat-value.success { color: var(--accent-green); }
+        .header-icons span { cursor: pointer; font-size: 1.1rem; margin-left: 8px; }
+
+        .main-content { display: grid; grid-template-columns: 240px 1fr 280px; gap: 8px; height: calc(100vh - 115px); padding-bottom: 55px; }
+        .panel { background: rgba(13, 31, 51, 0.9); border: 1px solid var(--border-glow); padding: 10px; overflow-y: auto; }
+        .panel-title { font-family: 'Orbitron', sans-serif; font-size: 0.75rem; color: var(--primary-blue); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border-glow); }
+        .left-panel, .right-panel { display: flex; flex-direction: column; gap: 8px; }
+
+        .metric-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.7rem; }
+        .metric-label { color: var(--text-secondary); }
+        .metric-value { font-weight: 600; }
+        .metric-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--accent-teal); }
+
+        .case-card { background: rgba(26, 58, 82, 0.5); border: 1px solid rgba(0, 212, 255, 0.2); padding: 5px 7px; margin-bottom: 3px; font-size: 0.65rem; }
+        .case-card.critical { border-color: var(--accent-red); background: rgba(255, 68, 68, 0.15); animation: pulse 2s infinite; }
+        .case-card.lost { opacity: 0.4; text-decoration: line-through; }
+        .case-id { font-weight: 600; color: var(--primary-blue); }
+
+        .narrative-container { min-height: 200px; }
+        .narrative-title { font-family: 'Orbitron', sans-serif; font-size: 1rem; color: var(--primary-blue); margin-bottom: 10px; }
+        .narrative-text { font-size: 0.8rem; line-height: 1.7; }
+        .narrative-text p { margin-bottom: 10px; }
+        .narrative-alert { border-left: 3px solid var(--accent-red); padding: 10px; margin: 10px 0; background: rgba(255, 68, 68, 0.1); font-size: 0.75rem; }
+        .narrative-success { border-left: 3px solid var(--accent-green); padding: 10px; margin: 10px 0; background: rgba(68, 255, 136, 0.08); font-size: 0.75rem; }
+
+        /* BANNERS - More detailed */
+        .banner { padding: 10px 12px; margin: 8px 0; font-size: 0.75rem; line-height: 1.5; border-radius: 3px; }
+        .banner-header { font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 5px; font-weight: 600; }
+        .banner.moment { background: rgba(187, 136, 255, 0.12); border-left: 3px solid var(--accent-purple); }
+        .banner.announcement { background: rgba(255, 215, 0, 0.1); border-left: 3px solid var(--accent-gold); }
+        .banner.news { background: rgba(255, 68, 68, 0.08); border-left: 3px solid var(--accent-red); font-style: italic; }
+        .banner.interaction { background: rgba(0, 255, 204, 0.1); border-left: 3px solid var(--accent-teal); cursor: pointer; }
+        .banner.interaction:hover { background: rgba(0, 255, 204, 0.2); }
+
+        /* SOS ALERT - Prominent */
+        .sos-banner { animation: sosFlash 1.5s infinite; padding: 12px; margin: 10px 0; border: 2px solid var(--accent-red); border-radius: 4px; }
+        .sos-header { font-family: 'Orbitron'; color: var(--accent-red); font-size: 0.8rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .sos-case { background: rgba(0,0,0,0.3); padding: 8px; margin: 6px 0; border-radius: 3px; font-size: 0.7rem; }
+        .sos-reasoning { color: var(--accent-amber); font-style: italic; margin: 4px 0; }
+        .sos-action { font-weight: 600; color: var(--accent-green); }
+        .sos-action.failed { color: var(--accent-red); }
+
+        /* HANDOFF BANNER - Detailed */
+        .handoff-banner { background: rgba(0, 212, 255, 0.1); border-left: 3px solid var(--primary-blue); padding: 10px 12px; margin: 8px 0; }
+        .handoff-case { padding: 6px; margin: 4px 0; background: rgba(0,0,0,0.2); border-radius: 3px; font-size: 0.7rem; }
+        .handoff-recommendation { color: var(--accent-amber); }
+
+        /* REALITY CHECKER BANNER */
+        .checker-banner { background: rgba(187, 136, 255, 0.15); border: 2px solid var(--accent-purple); padding: 12px; margin: 10px 0; animation: checkerPulse 2s infinite; }
+        .checker-header { font-family: 'Orbitron'; color: var(--accent-purple); font-size: 0.75rem; margin-bottom: 8px; }
+        .checker-fix { background: rgba(0,0,0,0.3); padding: 8px; margin: 5px 0; border-radius: 3px; font-size: 0.7rem; border-left: 2px solid var(--accent-pink); }
+
+        .choice-container { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-glow); }
+        .choice-btn { display: block; width: 100%; padding: 10px 14px; margin-bottom: 5px; background: rgba(0, 212, 255, 0.1); border: 1px solid var(--primary-blue); color: var(--text-primary); font-family: inherit; font-size: 0.75rem; cursor: pointer; text-align: left; }
+        .choice-btn:hover { background: rgba(0, 212, 255, 0.2); }
+        .choice-btn.danger { border-color: var(--accent-red); }
+        .choice-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .system-cat { font-size: 0.55rem; color: var(--text-secondary); text-transform: uppercase; margin: 5px 0 3px; }
+        .project-card { background: rgba(26, 58, 82, 0.4); border: 1px solid rgba(0,212,255,0.2); padding: 5px 7px; margin-bottom: 3px; font-size: 0.7rem; }
+        .project-card.deployed { border-color: var(--accent-green); background: rgba(68, 255, 136, 0.1); }
+        .project-card.available { border-color: var(--accent-amber); }
+        .project-name { color: var(--primary-blue); }
+        .project-card.deployed .project-name { color: var(--accent-green); }
+
+        .dialogue-row { display: flex; gap: 5px; margin-bottom: 5px; align-items: center; }
+        .dialogue-label { font-size: 0.55rem; color: var(--text-secondary); width: 28px; }
+        .dialogue-select { flex: 1; padding: 5px; background: var(--surface-dark); border: 1px solid rgba(255,255,255,0.2); color: var(--text-primary); font-family: inherit; font-size: 0.65rem; }
+        .dialogue-select option { background: var(--surface-dark); }
+        .dialogue-select optgroup { background: var(--primary-dark); color: var(--accent-amber); }
+        .dialogue-input { width: 100%; padding: 6px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: var(--text-primary); font-family: inherit; font-size: 0.7rem; margin-bottom: 5px; }
+        .dialogue-btn { width: 100%; padding: 6px; background: rgba(0,212,255,0.2); border: 1px solid var(--primary-blue); color: var(--primary-blue); cursor: pointer; font-size: 0.7rem; }
+        .dialogue-response { margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.3); font-size: 0.7rem; line-height: 1.5; display: none; border-left: 2px solid var(--accent-teal); min-height: 60px; }
+        .dialogue-response.visible { display: block; }
+
+        /* LOG - More colorful and verbose */
+        .log-entry { padding: 5px 7px; margin-bottom: 4px; border-left: 3px solid var(--primary-blue); font-size: 0.65rem; line-height: 1.4; background: rgba(0,0,0,0.2); }
+        .log-entry.sys { border-color: var(--primary-blue); color: var(--primary-blue); }
+        .log-entry.alert { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,170,0,0.1); }
+        .log-entry.success { border-color: var(--accent-green); color: var(--accent-green); background: rgba(68,255,136,0.1); }
+        .log-entry.ghost { border-color: var(--accent-teal); color: var(--accent-teal); background: rgba(0,255,204,0.1); }
+        .log-entry.hr { border-color: var(--accent-red); color: var(--accent-red); background: rgba(255,68,68,0.15); }
+        .log-entry.sos { border-color: var(--accent-red); background: rgba(255,68,68,0.2); color: white; font-weight: 600; }
+        .log-entry.death { border-color: #666; color: #999; background: rgba(100,100,100,0.1); }
+        .log-entry.checker { border-color: var(--accent-purple); color: var(--accent-purple); background: rgba(187,136,255,0.15); }
+        .log-entry.drama { border-color: var(--accent-pink); color: var(--accent-pink); background: rgba(255,136,204,0.1); }
+        .log-entry.finance { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(255,215,0,0.1); }
+        .log-entry.organ { border-color: var(--accent-green); color: var(--accent-green); background: rgba(68,255,136,0.15); }
+        .log-timestamp { color: var(--text-secondary); font-size: 0.55rem; margin-right: 5px; }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; }
+        .modal.visible { display: flex; }
+        .modal-content { background: var(--surface-dark); border: 2px solid var(--accent-amber); padding: 18px; max-width: 650px; width: 95%; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
+        .modal-title { font-family: 'Orbitron'; color: var(--accent-amber); }
+        .modal-close { font-size: 1.4rem; color: var(--accent-amber); cursor: pointer; background: none; border: none; }
+        .provider-tabs { display: flex; gap: 5px; margin-bottom: 12px; flex-wrap: wrap; }
+        .provider-tab { padding: 6px 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2); color: var(--text-secondary); cursor: pointer; font-family: inherit; font-size: 0.75rem; }
+        .provider-tab.active { background: var(--accent-amber); color: var(--primary-dark); }
+        .settings-section { margin-bottom: 10px; }
+        .settings-label { display: block; color: var(--accent-amber); font-size: 0.75rem; margin-bottom: 3px; }
+        .settings-input, .settings-select { width: 100%; padding: 7px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.3); color: var(--text-primary); font-family: inherit; font-size: 0.8rem; }
+        .modal-buttons { display: flex; gap: 8px; margin-top: 12px; }
+        .modal-btn { flex: 1; padding: 9px; font-family: 'Orbitron'; cursor: pointer; border: none; font-size: 0.75rem; }
+        .modal-btn.primary { background: var(--accent-amber); color: var(--primary-dark); }
+        .modal-btn.secondary { background: rgba(255,255,255,0.1); border: 1px solid var(--text-secondary); color: var(--text-primary); }
+        .status-indicator { margin: 10px 0; font-size: 0.8rem; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-red); margin-right: 6px; }
+        .status-dot.connected { background: var(--accent-green); }
+
+        .notification-container { position: fixed; top: 55px; right: 12px; z-index: 1500; max-width: 280px; }
+        .notification { padding: 12px 14px; background: rgba(13, 31, 51, 0.98); border: 1px solid var(--primary-blue); border-left: 4px solid var(--primary-blue); margin-bottom: 5px; animation: slideIn 0.3s; cursor: pointer; font-size: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .notification.alert { border-color: var(--accent-amber); border-left-color: var(--accent-amber); }
+        .notification.checker { border-color: var(--accent-purple); border-left-color: var(--accent-purple); background: rgba(20, 15, 40, 0.98); }
+
+        #omnibar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 1800; background: rgba(10, 22, 40, 0.98); border-top: 2px solid var(--primary-blue); padding: 7px 10px; display: none; }
+        #omnibar.visible { display: flex; gap: 8px; align-items: center; }
+        #omnibar-input { flex: 1; padding: 7px 10px; background: rgba(0,212,255,0.08); border: 1px solid var(--primary-blue); color: var(--text-primary); font-family: inherit; font-size: 0.8rem; }
+        #omnibar-send { padding: 7px 12px; background: var(--primary-blue); border: none; color: var(--primary-dark); font-family: 'Orbitron'; cursor: pointer; font-size: 0.75rem; }
+        #omnibar-hint { font-size: 0.55rem; color: var(--text-secondary); }
+
+        .loading { text-align: center; color: var(--primary-blue); padding: 10px; font-style: italic; font-size: 0.75rem; }
+        @media (max-width: 950px) { .main-content { grid-template-columns: 1fr; } .panel { max-height: 300px; } }
+    </style>
+</head>
+<body>
+    <div id="title-screen">
+        <div class="title-main">GOLA</div>
+        <div class="title-sub">METAMORPHOSIS</div>
+        <div class="title-version">v7.2 — Reality Checker | Emergent AI Layer</div>
+        <div class="title-input"><input type="text" id="player-name-input" placeholder="Enter CTO name..."></div>
+        <div class="title-buttons">
+            <button class="title-btn" onclick="startNewGame()">NEW GAME</button>
+            <button class="title-btn secondary" onclick="loadGame()">LOAD</button>
+            <button class="title-btn secondary" onclick="openSettings()">SETTINGS</button>
+        </div>
+    </div>
+
+    <div class="notification-container" id="notification-container"></div>
+
+    <div id="game-container">
+        <div class="game-header">
+            <div class="header-title">GOLA OPO — STA</div>
+            <div class="header-stats">
+                <div class="stat"><div class="stat-label">Quarter</div><div class="stat-value" id="h-quarter">Q1</div></div>
+                <div class="stat"><div class="stat-label">Cash</div><div class="stat-value" id="h-cash">$6M</div></div>
+                <div class="stat"><div class="stat-label">Runway</div><div class="stat-value" id="h-runway">260d</div></div>
+                <div class="stat"><div class="stat-label">Staff</div><div class="stat-value" id="h-staff">450</div></div>
+                <div class="stat"><div class="stat-label">Morale</div><div class="stat-value" id="h-morale">65%</div></div>
+                <div class="stat"><div class="stat-label">Organs</div><div class="stat-value" id="h-organs">0</div></div>
+            </div>
+            <div class="header-icons">
+                <span onclick="saveGame()" title="Save">💾</span>
+                <span onclick="openSettings()" title="Settings">⚙️</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="panel"><div class="panel-title">📊 FINANCIALS</div><div id="metrics-panel"></div></div>
+                <div class="panel" style="flex:1;"><div class="panel-title">🏥 CASES (<span id="case-count">0</span>)</div><div id="cases-panel"></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-title">📋 SITUATION REPORT</div>
+                <div id="narrative-panel" class="narrative-container"></div>
+                <div id="banners-panel"></div>
+            </div>
+            <div class="right-panel">
+                <div class="panel"><div class="panel-title">🤖 AI SYSTEMS</div><div id="systems-panel"></div></div>
+                <div class="panel">
+                    <div class="panel-title">💬 DIALOGUE</div>
+                    <div class="dialogue-row"><span class="dialogue-label">From</span><select id="from-select" class="dialogue-select" onchange="updateDialogue()"></select></div>
+                    <div class="dialogue-row"><span class="dialogue-label">To</span><select id="to-select" class="dialogue-select"></select></div>
+                    <input type="text" id="char-input" class="dialogue-input" placeholder="Type message...">
+                    <button class="dialogue-btn" onclick="talkTo()">Send Message</button>
+                    <div id="char-response" class="dialogue-response"></div>
+                </div>
+                <div class="panel" style="flex:1;"><div class="panel-title">📜 LOG</div><div id="log-panel"></div></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ═══════════════════════════════════════════════════════════════════════════
+         v7.2 FIX: Log panel scroll style 
+         Issue: Log panel grew infinitely, causing page to extend
+         Solution: Add max-height with overflow scroll
+         ═══════════════════════════════════════════════════════════════════════════ -->
+    <style>
+        /* ═══════════════════════════════════════════════════════════════════════
+           v7.2 FIX: Panel scroll constraints
+           Issue: Log and cases panels grew infinitely, causing page to extend
+           Solution: Add max-height with overflow scroll to both panels
+           ═══════════════════════════════════════════════════════════════════════ */
+        
+        /* v7.2: Force log panel to have max height and scroll */
+        #log-panel {
+            max-height: 300px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary-blue) var(--surface-dark);
+        }
+        #log-panel::-webkit-scrollbar { width: 6px; }
+        #log-panel::-webkit-scrollbar-track { background: var(--surface-dark); }
+        #log-panel::-webkit-scrollbar-thumb { background: var(--primary-blue); border-radius: 3px; }
+        
+        /* v7.2: Force cases panel to have max height and scroll */
+        #cases-panel {
+            max-height: 400px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent-teal) var(--surface-dark);
+        }
+        #cases-panel::-webkit-scrollbar { width: 6px; }
+        #cases-panel::-webkit-scrollbar-track { background: var(--surface-dark); }
+        #cases-panel::-webkit-scrollbar-thumb { background: var(--accent-teal); border-radius: 3px; }
+    </style>
+
+    <div id="omnibar">
+        <span id="omnibar-hint">💡 Events/Commands</span>
+        <input type="text" id="omnibar-input" placeholder="'bus crash on I-35' or 'CFO found $10 million'">
+        <button id="omnibar-send" onclick="handleOmnibar()">⏎ SEND</button>
+    </div>
+
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><div class="modal-title">⚙️ AI Settings</div><button class="modal-close" onclick="closeModal('settings-modal')">×</button></div>
+            <div class="provider-tabs" id="provider-tabs"></div>
+            <div class="settings-section" id="endpoint-section"><label class="settings-label">Endpoint URL</label><input type="text" class="settings-input" id="endpoint-input"></div>
+            <div class="settings-section" id="api-key-section"><label class="settings-label">API Key</label><input type="password" class="settings-input" id="api-key-input"></div>
+            <div class="settings-section"><label class="settings-label">Model</label><select class="settings-select" id="model-select"></select><input type="text" class="settings-input" id="model-input" style="margin-top:5px;display:none;" placeholder="Or type custom model..."></div>
+            <div class="status-indicator"><span class="status-dot" id="status-dot"></span><span id="status-text">Not connected</span></div>
+            <div class="modal-buttons"><button class="modal-btn secondary" onclick="testConnection()">Test Connection</button><button class="modal-btn primary" onclick="saveSettings()">Save Settings</button></div>
+        </div>
+    </div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// GOLA v7.2 — REALITY CHECKER ARCHITECTURE
+// Core: LLM-powered realism verification after every turn
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI PROVIDERS — Full configuration restored
+// ═══════════════════════════════════════════════════════════════════════════════
+const AI_PROVIDERS = {
+    cerebras: { 
+        name: "Cerebras", 
+        endpoint: "https://api.cerebras.ai/v1/chat/completions", 
+        requiresKey: true, 
+        editable: false,
+        defaultModel: "qwen-3-235b-a22b-instruct-2507", 
+        models: ["qwen-3-235b-a22b-instruct-2507", "zai-glm-4.6", "qwen-3-32b", "llama-3.3-70b", "llama3.1-8b"] 
+    },
+    openai: { 
+        name: "OpenAI", 
+        endpoint: "https://api.openai.com/v1/chat/completions", 
+        requiresKey: true, 
+        editable: false,
+        defaultModel: "gpt-4o", 
+        models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"] 
+    },
+    anthropic: { 
+        name: "Anthropic", 
+        endpoint: "https://api.anthropic.com/v1/messages", 
+        requiresKey: true, 
+        editable: false,
+        defaultModel: "claude-3-5-sonnet-20241022", 
+        models: ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"],
+        isAnthropic: true
+    },
+    groq: { 
+        name: "Groq", 
+        endpoint: "https://api.groq.com/openai/v1/chat/completions", 
+        requiresKey: true, 
+        editable: false,
+        defaultModel: "llama-3.3-70b-versatile", 
+        models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"] 
+    },
+    lmstudio: { 
+        name: "LM Studio", 
+        endpoint: "http://localhost:1234/v1/chat/completions", 
+        requiresKey: false, 
+        editable: true,
+        defaultModel: "local-model", 
+        models: [] 
+    },
+    ollama: { 
+        name: "Ollama", 
+        endpoint: "http://localhost:11434/api/chat", 
+        requiresKey: false, 
+        editable: true,
+        defaultModel: "llama3", 
+        models: [],
+        isOllama: true
+    },
+    custom: { 
+        name: "Custom API", 
+        endpoint: "", 
+        requiresKey: true, 
+        editable: true,
+        defaultModel: "", 
+        models: [] 
+    }
+};
+
+class AIService {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AIService Constructor
+    // BUG FIX (v7.1): localStorage was overriding hardcoded defaults even when
+    // the stored API key was empty. Now we check if the loaded apiKey is falsy
+    // and fall back to hardcoded default. This fixes the "Connection failed" bug.
+    // ═══════════════════════════════════════════════════════════════════════════
+    constructor() { 
+        const stored = JSON.parse(localStorage.getItem('gola_ai') || 'null');
+        
+        // HARDCODED DEFAULTS - Cerebras with qwen-3-235b-a22b-instruct-2507
+        // This is a powerful instruct model that defaults to English
+        const DEFAULTS = {
+            provider: 'cerebras',
+            apiKey: 'csk-t8tccmxy6pyc8fkrffkjj56d4j69jp85565j9hke2jrpvdf5',
+            endpoint: 'https://api.cerebras.ai/v1/chat/completions',
+            model: 'qwen-3-235b-a22b-instruct-2507'
+        };
+        
+        if (stored) {
+            this.settings = stored;
+            // CRITICAL FIX: If stored apiKey is empty/falsy, use hardcoded default
+            if (!this.settings.apiKey || this.settings.apiKey.trim() === '') {
+                this.settings.apiKey = DEFAULTS.apiKey;
+                console.log('[AIService] Empty API key in localStorage, using hardcoded default');
+            }
+            // Also ensure endpoint is set
+            if (!this.settings.endpoint) {
+                this.settings.endpoint = AI_PROVIDERS[this.settings.provider]?.endpoint || DEFAULTS.endpoint;
+            }
+            // MIGRATION: If user had llama selected, migrate to newer model
+            if (this.settings.model === 'llama-3.3-70b' || this.settings.model === 'llama3.1-8b') {
+                this.settings.model = DEFAULTS.model;
+                console.log('[AIService] Migrating from llama to qwen-3-235b-a22b-instruct-2507');
+            }
+        } else {
+            this.settings = DEFAULTS;
+            console.log('[AIService] No stored settings, using hardcoded defaults');
+        }
+    }
+    
+    save() { localStorage.setItem('gola_ai', JSON.stringify(this.settings)); }
+    
+    async query(sys, usr, maxTokens = 800) {
+        const provider = AI_PROVIDERS[this.settings.provider];
+        const headers = { 'Content-Type': 'application/json' };
+        
+        if (this.settings.apiKey) {
+            if (provider?.isAnthropic) {
+                headers['x-api-key'] = this.settings.apiKey;
+                headers['anthropic-version'] = '2023-06-01';
+            } else {
+                headers['Authorization'] = `Bearer ${this.settings.apiKey}`;
+            }
+        }
+        
+        let body;
+        if (provider?.isAnthropic) {
+            body = JSON.stringify({
+                model: this.settings.model,
+                max_tokens: maxTokens,
+                system: sys,
+                messages: [{ role: 'user', content: usr }]
+            });
+        } else if (provider?.isOllama) {
+            body = JSON.stringify({
+                model: this.settings.model,
+                messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+                stream: false
+            });
+        } else {
+            body = JSON.stringify({
+                model: this.settings.model,
+                messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+                max_tokens: maxTokens,
+                temperature: 0.7
+            });
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // ENHANCED ERROR HANDLING (v7.1 DEBUG)
+        // Wrap fetch in try/catch to distinguish network errors from API errors
+        // ═══════════════════════════════════════════════════════════════════════
+        let r;
+        try {
+            console.log('[AIService.query] Calling:', this.settings.endpoint, 'Model:', this.settings.model);
+            r = await fetch(this.settings.endpoint, { method: 'POST', headers, body });
+        } catch (fetchError) {
+            console.error('[AIService.query] FETCH FAILED:', fetchError);
+            throw new Error(`Network error: ${fetchError.message}`);
+        }
+        
+        // Check HTTP status
+        if (!r.ok) {
+            const errorText = await r.text().catch(() => 'Could not read error body');
+            console.error('[AIService.query] API returned error:', r.status, errorText);
+            throw new Error(`API Error ${r.status}: ${errorText.substring(0, 200)}`);
+        }
+        
+        // Parse response
+        let data;
+        try {
+            data = await r.json();
+            console.log('[AIService.query] Response received, choices:', data.choices?.length);
+            // DEBUG: Log the full response structure to see what we're getting
+            console.log('[AIService.query] Full response structure:', JSON.stringify(data).substring(0, 1000));
+        } catch (jsonError) {
+            console.error('[AIService.query] Failed to parse JSON response:', jsonError);
+            throw new Error(`Invalid JSON response: ${jsonError.message}`);
+        }
+        
+        // Extract content based on provider
+        if (provider?.isAnthropic) return data.content[0].text;
+        if (provider?.isOllama) return data.message.content;
+        
+        // OpenAI-compatible (Cerebras, Groq, etc.)
+        // ═══════════════════════════════════════════════════════════════════════
+        // FIX: Check for content at multiple possible locations
+        // Some providers put content directly in message.content
+        // Reasoning models (like zai-glm) use message.reasoning
+        // ═══════════════════════════════════════════════════════════════════════
+        if (!data.choices || !data.choices[0]) {
+            console.error('[AIService.query] No choices in response:', JSON.stringify(data).substring(0, 500));
+            throw new Error('API returned no choices');
+        }
+        
+        const choice = data.choices[0];
+        let content = null;
+        
+        // Try different possible content locations
+        if (choice.message?.content !== undefined && choice.message.content !== null) {
+            content = choice.message.content;
+        } else if (choice.message?.reasoning !== undefined) {
+            // REASONING MODELS (zai-glm, etc.) put output in 'reasoning' field
+            console.log('[AIService.query] Using reasoning field (reasoning model detected)');
+            content = choice.message.reasoning;
+        } else if (choice.text !== undefined) {
+            // Some APIs return text directly
+            content = choice.text;
+        } else if (choice.content !== undefined) {
+            content = choice.content;
+        } else if (typeof choice.message === 'string') {
+            // Sometimes message itself is the string
+            content = choice.message;
+        }
+        
+        if (content === null || content === undefined) {
+            console.error('[AIService.query] Could not find content in choice:', JSON.stringify(choice).substring(0, 500));
+            throw new Error('API response missing content field');
+        }
+        
+        console.log('[AIService.query] Extracted content length:', content.length);
+        return content;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GAME STATE — With Relationship Matrix & Emotional States
+// ═══════════════════════════════════════════════════════════════════════════════
+const EMOTIONS = ['neutral', 'happy', 'stressed', 'angry', 'sad', 'anxious', 'exhausted', 'hopeful'];
+const RELATIONSHIP_STATES = ['neutral', 'friendly', 'tense', 'hostile', 'romantic', 'broken', 'professional', 'mentoring'];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IT INFRASTRUCTURE TIERS (v7.1 NEW FEATURE)
+// ═══════════════════════════════════════════════════════════════════════════════
+// This adds the missing economic loop: You can't just deploy AI - you need 
+// infrastructure first. Creates investment vs. return tension.
+//
+// Tier Progression:
+//   Level 0 (Legacy) → Can't run AI at all
+//   Level 1 (Virtualized) → Basic foundation systems only
+//   Level 2 (Hybrid Cloud) → Core AI systems
+//   Level 3 (AI-Ready) → Advanced systems with GPUs
+//   Level 4 (Hyperscale) → Everything including Relational AI
+//
+// Each upgrade costs money AND takes 1 quarter to complete (upgrading state).
+// Lower tiers have lower uptime = more random incidents possible.
+// ═══════════════════════════════════════════════════════════════════════════════
+const INFRA_TIERS = {
+    0: { 
+        name: 'Legacy On-Prem', 
+        cost: 0,           // Already have this
+        gpuUnits: 0, 
+        networkScore: 40, 
+        uptime: 0.94,
+        enables: [],       // No AI systems at level 0
+        description: 'Aging servers, no AI capability. Frequent outages.',
+        itStaffNeeded: 2   // Minimum IT staff to maintain
+    },
+    1: { 
+        name: 'Virtualized', 
+        cost: 0.8,         // $800K to upgrade
+        gpuUnits: 0, 
+        networkScore: 60, 
+        uptime: 0.97,
+        enables: ['eventBackbone', 'digitalTwin'],
+        description: 'VMware cluster, basic redundancy. Foundation AI possible.',
+        itStaffNeeded: 3
+    },
+    2: { 
+        name: 'Hybrid Cloud', 
+        cost: 1.5,         // $1.5M to upgrade
+        gpuUnits: 2, 
+        networkScore: 75, 
+        uptime: 0.98,
+        enables: ['eventBackbone', 'digitalTwin', 'handoff', 'sos', 'ingress'],
+        description: 'Azure integration, 2 GPU nodes. Core AI systems enabled.',
+        itStaffNeeded: 4
+    },
+    3: { 
+        name: 'AI-Ready', 
+        cost: 3.0,         // $3M to upgrade
+        gpuUnits: 8, 
+        networkScore: 88, 
+        uptime: 0.99,
+        enables: ['eventBackbone', 'digitalTwin', 'handoff', 'sos', 'ingress', 'intensivist', 'familyScaff'],
+        description: 'Dedicated GPU cluster, ML Ops pipeline. Advanced AI ready.',
+        itStaffNeeded: 6
+    },
+    4: { 
+        name: 'Hyperscale', 
+        cost: 6.0,         // $6M to upgrade
+        gpuUnits: 24, 
+        networkScore: 96, 
+        uptime: 0.995,
+        enables: ['eventBackbone', 'digitalTwin', 'handoff', 'sos', 'ingress', 'intensivist', 'familyScaff', 'optimizer', 'relationalAI'],
+        description: 'Full AI infrastructure. Global Optimizer and Relational AI capable.',
+        itStaffNeeded: 8
+    }
+};
+
+const G = {
+    playerName: '', quarter: 1, year: 2026, totalQ: 1,
+    
+    // FINANCIALS
+    cash: 6.0, revenue: 100.0, laborCost: 48.0, headcount: 450, runwayDays: 260,
+    
+    // PERFORMANCE
+    morale: 65, trust: 50, burnout: 5.5, cmsStars: 3.2,
+    
+    // ORGANS
+    organs: { kidneys: 0, livers: 0, hearts: 0, lungs: 0, pancreas: 0 },
+    ytdOrgans: 0, donors: 0,
+    
+    // EDR
+    edrProgress: 15, edrPivoted: false,
+    
+    // WORLD MEMORY
+    worldEvents: [],
+    dramaLog: [],
+    checkerFixes: [], // Stores reality checker corrections
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // GAME HISTORY (v7.1 NEW FEATURE)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Compressed history for QC layer - enables long-range coherence checking.
+    // The Reality Checker can now catch inconsistencies across the whole game,
+    // not just turn-to-turn. E.g., "Player promised no layoffs but just fired 30."
+    // ═══════════════════════════════════════════════════════════════════════════
+    gameHistory: {
+        keyEvents: [],        // Major events: "Q2: Power outage killed 8 cases"
+        promises: [],         // Things player committed to: "Q1: Promised no layoffs"
+        brokenPromises: [],   // Tracked when promises are broken
+        incidents: [],        // System failures, crises
+        promotions: [],       // Personnel changes up
+        departures: [],       // Personnel changes down (fired, quit, died)
+        relationshipShifts: [] // Major relationship changes
+    },
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // RELATIONSHIP HISTORY (v7.1 NEW FEATURE)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Snapshots of relationships over time - enables trend detection.
+    // "Emily's relationships have been degrading since Q2"
+    // "Something happened in Q3 that broke multiple relationships"
+    // ═══════════════════════════════════════════════════════════════════════════
+    relationshipHistory: [],  // Array of { q: quarter, snapshot: {...} }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IT INFRASTRUCTURE (v7.1 NEW FEATURE)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // The missing economic loop: Infrastructure investment enables AI deployment.
+    // Can't deploy Advanced AI without Level 3+ infrastructure.
+    // Creates tension: invest in foundation vs. rush deployments.
+    // ═══════════════════════════════════════════════════════════════════════════
+    infrastructure: {
+        level: 0,              // Current tier (0-4)
+        name: 'Legacy On-Prem',
+        upgrading: false,      // True if upgrade in progress
+        upgradeTarget: null,   // Target level when upgrading
+        upgradeStartQ: null,   // Quarter upgrade started
+        gpuUnits: 0,
+        networkScore: 40,
+        uptime: 0.94,
+        incidents: []          // Recent infrastructure incidents
+    },
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IT IMPLEMENTATION TEAM (v7.1 NEW FEATURE)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AI deployments require capacity. Can't deploy everything at once.
+    // Trade-off: hire more IT (costs money) or deploy slower.
+    // ═══════════════════════════════════════════════════════════════════════════
+    itTeam: {
+        size: 3,               // Number of IT staff
+        capacity: 3,           // Projects they can handle per quarter
+        activeProjects: [],    // Current deployments in progress
+        costPerHead: 0.15      // $150K per IT staff annually
+    },
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // KNOWLEDGE DOMAINS (v7.1 NEW FEATURE)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // When employees leave, institutional knowledge is at risk.
+    // Losing someone isn't just -1 headcount - it's losing capability.
+    // ═══════════════════════════════════════════════════════════════════════════
+    knowledgeAtRisk: [],  // { domain, lostQ, from } - knowledge lost when people leave
+    
+    // FLAGS
+    flags: {
+        powerOutage: false, powerOutageDays: 0,
+        economicCrisis: false, pandemicActive: false,
+        hrInvestigation: false, layoffsAnnounced: false
+    },
+    
+    // CHARACTERS with emotional state, relationships, and knowledge domains
+    // Knowledge domains: when employee leaves, these capabilities are at risk
+    chars: {
+        margaretChen: { name: "Margaret Chen", role: "CEO", p: "Visionary leader. Guards the Human Line.", alive: true, employed: true, trust: 50, isExec: true, canFire: true, emotion: 'neutral', baseEmotion: 'neutral', knowledge: ['executive-strategy', 'board-relations', 'regulatory-compliance'], critical: true },
+        davidKim: { name: "David Kim", role: "CFO", p: "Numbers-driven pragmatist. Show me the ROI.", alive: true, employed: true, trust: 40, isExec: true, emotion: 'stressed', baseEmotion: 'stressed', knowledge: ['financial-planning', 'budget-control', 'audit-compliance'], critical: true },
+        drMartinez: { name: "Dr. Sarah Martinez", role: "CMO", p: "AI-skeptical physician. Patient safety above all.", alive: true, employed: true, trust: 50, isExec: true, emotion: 'neutral', baseEmotion: 'neutral', knowledge: ['clinical-protocols', 'dcd-procedures', 'medical-oversight'], critical: true },
+        lisaThompson: { name: "Lisa Thompson", role: "Director Clinical Ops", p: "Veteran coordinator. Runs the AOC floor.", alive: true, employed: true, trust: 45, emotion: 'exhausted', baseEmotion: 'neutral', knowledge: ['coordinator-workflows', 'aoc-operations', 'case-management'], critical: false },
+        marcusRodriguez: { name: "Marcus Rodriguez", role: "IT Director", p: "Tech enthusiast. Infrastructure wizard.", alive: true, employed: true, trust: 60, emotion: 'hopeful', baseEmotion: 'hopeful', knowledge: ['network-infrastructure', 'system-architecture', 'ai-implementation'], critical: true },
+        emilyNguyen: { name: "Emily Nguyen", role: "Director Family Services", p: "Guardian of sacred conversations.", alive: true, employed: true, trust: 55, emotion: 'neutral', baseEmotion: 'neutral', knowledge: ['family-conversations', 'grief-counseling', 'authorization-process'], critical: false },
+        jonathanHewlett: { name: "Jonathan Hewlett", role: "Innovation Director", p: "EDR project owner. Takes the fall if AI fails.", alive: true, employed: true, trust: 52, emotion: 'anxious', baseEmotion: 'anxious', isScapegoat: true, knowledge: ['ai-strategy', 'vendor-management', 'project-planning'], critical: false },
+        rachelMorris: { name: "Rachel Morris", role: "HR Director", p: "Handles complaints and terminations.", alive: true, employed: true, trust: 48, canFire: true, emotion: 'neutral', baseEmotion: 'neutral', knowledge: ['hr-compliance', 'workforce-management', 'employee-relations'], critical: false },
+        kevinPatel: { name: "Kevin Patel", role: "General Counsel", p: "Risk-averse. Protects the organization.", alive: true, employed: true, trust: 45, emotion: 'neutral', baseEmotion: 'neutral', knowledge: ['legal-compliance', 'contract-management', 'liability-protection'], critical: true },
+        sarahChenComms: { name: "Sarah Chen", role: "Communications", p: "PR and internal messaging.", alive: true, employed: true, trust: 50, emotion: 'neutral', baseEmotion: 'neutral', knowledge: ['internal-comms', 'public-relations', 'crisis-communications'], critical: false },
+        carlosGarcia: { name: "Carlos Garcia", role: "Night Shift Lead", p: "Exhausted veteran. Desperate for help.", alive: true, employed: true, trust: 42, emotion: 'exhausted', baseEmotion: 'exhausted', knowledge: ['night-operations', 'hospital-contacts', 'emergency-protocols'], critical: false },
+        jesseCadena: { name: "Jesse Cadena", role: "Help Desk Tech", p: "Makes rounds. Collects gossip and intel.", alive: true, employed: true, trust: 55, emotion: 'neutral', baseEmotion: 'neutral', isGossip: true, knowledge: ['help-desk', 'user-support', 'organizational-intel'], critical: false }
+    },
+    
+    // RELATIONSHIP MATRIX - charId -> { charId: relationshipState }
+    relationships: {},
+    
+    // AI SYSTEMS
+    systems: {
+        eventBackbone: { name: "Event Backbone", cost: 1.5, status: 'available', prereqs: [], cat: 'foundation', efficiency: 0 },
+        digitalTwin: { name: "Digital Twin", cost: 2.0, status: 'locked', prereqs: ['eventBackbone'], cat: 'foundation', efficiency: 5 },
+        handoff: { name: "Handoff Piston", cost: 0.5, status: 'locked', prereqs: ['eventBackbone'], cat: 'core', efficiency: 12 },
+        sos: { name: "SOS Monitor", cost: 0.75, status: 'locked', prereqs: ['eventBackbone'], cat: 'core', efficiency: 8 },
+        ingress: { name: "Intelligent Ingress", cost: 0.8, status: 'locked', prereqs: ['handoff'], cat: 'core', efficiency: 10 },
+        intensivist: { name: "AI Intensivist", cost: 1.2, status: 'locked', prereqs: ['sos','digitalTwin'], cat: 'advanced', efficiency: 15 },
+        optimizer: { name: "Global Optimizer", cost: 2.5, status: 'locked', prereqs: ['digitalTwin','intensivist'], cat: 'advanced', efficiency: 20 },
+        familyScaff: { name: "Family Scaffolding", cost: 0.6, status: 'locked', prereqs: ['handoff'], cat: 'advanced', efficiency: 6 },
+        relationalAI: { name: "Relational AI ⚠️", cost: 3.0, status: 'locked', prereqs: ['familyScaff','optimizer'], cat: 'danger', efficiency: 25, danger: true }
+    },
+    
+    // CASES
+    cases: [],
+    caseId: 1000,
+    
+    // SCENE
+    scene: 'q1_opening', sirenPassed: false, history: [],
+    
+    // STATE SNAPSHOT for Reality Checker
+    lastSnapshot: null,
+    pendingUserAction: null
+};
+
+// Initialize relationship matrix
+function initRelationships() {
+    const charIds = Object.keys(G.chars);
+    G.relationships = {};
+    charIds.forEach(id1 => {
+        G.relationships[id1] = {};
+        charIds.forEach(id2 => {
+            if (id1 !== id2) G.relationships[id1][id2] = 'professional';
+        });
+    });
+    // Some default relationships
+    G.relationships.lisaThompson.carlosGarcia = 'friendly';
+    G.relationships.carlosGarcia.lisaThompson = 'friendly';
+    G.relationships.marcusRodriguez.jesseCadena = 'friendly';
+    G.relationships.jesseCadena.marcusRodriguez = 'friendly';
+}
+
+function getRelationship(char1, char2) {
+    return G.relationships[char1]?.[char2] || 'neutral';
+}
+
+function setRelationship(char1, char2, state) {
+    if (G.relationships[char1]) G.relationships[char1][char2] = state;
+    if (G.relationships[char2]) G.relationships[char2][char1] = state;
+    addLog('drama', `💔 Relationship: ${G.chars[char1]?.name} & ${G.chars[char2]?.name} → ${state}`);
+    
+    // v7.1: Track significant relationship changes in game history
+    logKeyEvent('relationship', `${G.chars[char1]?.name} & ${G.chars[char2]?.name} relationship → ${state}`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GAME HISTORY FUNCTIONS (v7.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+// These functions maintain compressed game history for the QC layer.
+// Enables long-range coherence checking: "Player promised no layoffs in Q1..."
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Log a key event to game history for QC layer to reference
+ * @param {string} type - Event type: 'promise', 'broken_promise', 'incident', 'departure', 'promotion', 'relationship', 'crisis'
+ * @param {string} summary - Brief description of what happened
+ */
+function logKeyEvent(type, summary) {
+    const entry = { q: G.totalQ, type, summary, year: G.year };
+    G.gameHistory.keyEvents.push(entry);
+    
+    // Also add to specific arrays for easy querying
+    switch(type) {
+        case 'promise':
+            G.gameHistory.promises.push(`Q${G.totalQ}: ${summary}`);
+            break;
+        case 'broken_promise':
+            G.gameHistory.brokenPromises.push(`Q${G.totalQ}: ${summary}`);
+            break;
+        case 'incident':
+            G.gameHistory.incidents.push(entry);
+            break;
+        case 'departure':
+            G.gameHistory.departures.push(entry);
+            break;
+        case 'promotion':
+            G.gameHistory.promotions.push(entry);
+            break;
+        case 'relationship':
+            G.gameHistory.relationshipShifts.push(entry);
+            break;
+    }
+    
+    // Keep history manageable - only last 30 key events
+    if (G.gameHistory.keyEvents.length > 30) {
+        G.gameHistory.keyEvents.shift();
+    }
+    
+    console.log(`[GameHistory] Q${G.totalQ}: ${type} - ${summary}`);
+}
+
+/**
+ * Compile game history context for QC layer prompt
+ * Returns formatted string of key events, promises, and broken promises
+ */
+function compileGameHistoryContext() {
+    let context = '';
+    
+    if (G.gameHistory.keyEvents.length > 0) {
+        context += '\n\nGAME HISTORY (remember these events):\n';
+        G.gameHistory.keyEvents.slice(-15).forEach(e => {
+            context += `- Q${e.q}: [${e.type}] ${e.summary}\n`;
+        });
+    }
+    
+    if (G.gameHistory.promises.length > 0) {
+        context += '\nPROMISES MADE BY PLAYER:\n';
+        G.gameHistory.promises.forEach(p => context += `- ${p}\n`);
+    }
+    
+    if (G.gameHistory.brokenPromises.length > 0) {
+        context += '\n⚠️ PROMISES BROKEN:\n';
+        G.gameHistory.brokenPromises.forEach(p => context += `- ${p}\n`);
+    }
+    
+    if (G.knowledgeAtRisk.length > 0) {
+        context += '\n⚠️ KNOWLEDGE AT RISK (departed employees):\n';
+        G.knowledgeAtRisk.slice(-5).forEach(k => {
+            context += `- ${k.domain} (lost Q${k.lostQ} when ${k.from} left)\n`;
+        });
+    }
+    
+    return context;
+}
+
+/**
+ * Snapshot relationships for trend tracking
+ * Called once per quarter to enable relationship trend analysis
+ */
+function snapshotRelationships() {
+    G.relationshipHistory.push({
+        q: G.totalQ,
+        snapshot: JSON.parse(JSON.stringify(G.relationships))
+    });
+    
+    // Keep only last 8 quarters of relationship history
+    if (G.relationshipHistory.length > 8) {
+        G.relationshipHistory.shift();
+    }
+}
+
+/**
+ * Get relationship trend between two characters
+ * @returns {string} 'stable' | 'improving' | 'degrading' | 'volatile' | 'unknown'
+ */
+function getRelationshipTrend(char1, char2) {
+    if (G.relationshipHistory.length < 2) return 'unknown';
+    
+    const states = G.relationshipHistory.map(h => h.snapshot[char1]?.[char2] || 'neutral');
+    const stateValues = { 'hostile': -2, 'broken': -2, 'tense': -1, 'neutral': 0, 'professional': 0, 'friendly': 1, 'mentoring': 1, 'romantic': 2 };
+    
+    const values = states.map(s => stateValues[s] || 0);
+    const recent = values.slice(-3);
+    
+    if (recent.length < 2) return 'unknown';
+    
+    const trend = recent[recent.length - 1] - recent[0];
+    const variance = Math.max(...recent) - Math.min(...recent);
+    
+    if (variance >= 3) return 'volatile';
+    if (trend >= 2) return 'improving';
+    if (trend <= -2) return 'degrading';
+    return 'stable';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IT INFRASTRUCTURE FUNCTIONS (v7.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Manages infrastructure upgrades and checks requirements for AI deployments.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Check if current infrastructure can support a given AI system
+ * @param {string} systemId - The AI system to check
+ * @returns {object} { canDeploy: boolean, reason: string }
+ */
+function checkInfrastructureRequirement(systemId) {
+    const currentLevel = G.infrastructure.level;
+    const currentTier = INFRA_TIERS[currentLevel];
+    
+    // Check if system is enabled at current tier
+    if (currentTier.enables.includes(systemId)) {
+        return { canDeploy: true, reason: 'Infrastructure sufficient' };
+    }
+    
+    // Find minimum tier needed
+    for (let i = currentLevel + 1; i <= 4; i++) {
+        if (INFRA_TIERS[i].enables.includes(systemId)) {
+            return { 
+                canDeploy: false, 
+                reason: `Requires ${INFRA_TIERS[i].name} infrastructure (Level ${i}). Current: Level ${currentLevel}.`
+            };
+        }
+    }
+    
+    return { canDeploy: false, reason: 'System not supported by any infrastructure tier' };
+}
+
+/**
+ * Start infrastructure upgrade to target level
+ * @param {number} targetLevel - Target infrastructure tier (1-4)
+ * @returns {boolean} Success
+ */
+function startInfrastructureUpgrade(targetLevel) {
+    if (targetLevel <= G.infrastructure.level) {
+        showNotif('❌ Invalid Upgrade', 'Already at or above target level');
+        return false;
+    }
+    
+    if (G.infrastructure.upgrading) {
+        showNotif('❌ Upgrade In Progress', 'Wait for current upgrade to complete');
+        return false;
+    }
+    
+    const tier = INFRA_TIERS[targetLevel];
+    if (G.cash < tier.cost) {
+        showNotif('❌ Insufficient Funds', `Need $${tier.cost}M for ${tier.name}`);
+        return false;
+    }
+    
+    // Deduct cost and start upgrade
+    G.cash -= tier.cost;
+    G.infrastructure.upgrading = true;
+    G.infrastructure.upgradeTarget = targetLevel;
+    G.infrastructure.upgradeStartQ = G.totalQ;
+    
+    addLog('sys', `🔧 Infrastructure upgrade started: → ${tier.name} ($${tier.cost}M)`);
+    logKeyEvent('incident', `Infrastructure upgrade to ${tier.name} started ($${tier.cost}M investment)`);
+    showNotif('🔧 Upgrade Started', `${tier.name} will be ready next quarter`);
+    
+    return true;
+}
+
+/**
+ * Complete infrastructure upgrade (called during quarter advance)
+ */
+function processInfrastructureUpgrade() {
+    if (!G.infrastructure.upgrading) return;
+    
+    // Upgrade completes after 1 quarter
+    if (G.totalQ > G.infrastructure.upgradeStartQ) {
+        const newLevel = G.infrastructure.upgradeTarget;
+        const tier = INFRA_TIERS[newLevel];
+        
+        G.infrastructure.level = newLevel;
+        G.infrastructure.name = tier.name;
+        G.infrastructure.gpuUnits = tier.gpuUnits;
+        G.infrastructure.networkScore = tier.networkScore;
+        G.infrastructure.uptime = tier.uptime;
+        G.infrastructure.upgrading = false;
+        G.infrastructure.upgradeTarget = null;
+        G.infrastructure.upgradeStartQ = null;
+        
+        addLog('success', `✅ Infrastructure upgraded to ${tier.name}!`);
+        logKeyEvent('incident', `Infrastructure upgraded to ${tier.name} - new AI capabilities unlocked`);
+        showNotif('✅ Upgrade Complete', `Now running ${tier.name}`);
+    }
+}
+
+/**
+ * Random infrastructure incident based on uptime
+ * Lower tier = higher incident chance
+ */
+function checkInfrastructureIncident() {
+    const tier = INFRA_TIERS[G.infrastructure.level];
+    const incidentChance = 1 - tier.uptime; // e.g., 0.94 uptime = 6% incident chance
+    
+    if (Math.random() < incidentChance) {
+        const incidents = [
+            { name: 'Network Outage', impact: 'Cases delayed', morale: -3, trust: -2 },
+            { name: 'Server Crash', impact: 'Data temporarily unavailable', morale: -2, trust: -3 },
+            { name: 'Storage Failure', impact: 'Backup systems activated', morale: -1, trust: -2 },
+            { name: 'Security Alert', impact: 'Systems locked down briefly', morale: -2, trust: -1 }
+        ];
+        
+        const incident = incidents[Math.floor(Math.random() * incidents.length)];
+        G.morale += incident.morale;
+        G.trust += incident.trust;
+        G.infrastructure.incidents.push({ q: G.totalQ, ...incident });
+        
+        addLog('alert', `⚠️ IT INCIDENT: ${incident.name} — ${incident.impact}`);
+        logKeyEvent('incident', `IT infrastructure incident: ${incident.name}`);
+        
+        return incident;
+    }
+    return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KNOWLEDGE DRAIN FUNCTIONS (v7.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Tracks institutional knowledge loss when employees leave.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Handle knowledge drain when an employee leaves
+ * @param {string} charId - Character ID leaving
+ * @param {string} reason - 'terminated' | 'resigned' | 'deceased'
+ */
+function processKnowledgeDrain(charId, reason) {
+    const char = G.chars[charId];
+    if (!char || !char.knowledge) return;
+    
+    // Log knowledge loss
+    char.knowledge.forEach(domain => {
+        G.knowledgeAtRisk.push({
+            domain: domain,
+            lostQ: G.totalQ,
+            from: char.name,
+            reason: reason
+        });
+    });
+    
+    // Critical employees have bigger impact
+    if (char.critical) {
+        G.trust -= 10;
+        G.morale -= 8;
+        addLog('alert', `⚠️ CRITICAL: ${char.name}'s departure creates major knowledge gap`);
+        logKeyEvent('departure', `CRITICAL: ${char.name} (${char.role}) ${reason}. Knowledge at risk: ${char.knowledge.join(', ')}`);
+    } else {
+        addLog('sys', `📋 ${char.name} departed. Knowledge transfer needed: ${char.knowledge.join(', ')}`);
+        logKeyEvent('departure', `${char.name} (${char.role}) ${reason}. Knowledge: ${char.knowledge.join(', ')}`);
+    }
+    
+    // Keep knowledge at risk list manageable
+    if (G.knowledgeAtRisk.length > 20) {
+        G.knowledgeAtRisk.shift();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REALITY CHECKER — LLM-powered realism verification
+// ═══════════════════════════════════════════════════════════════════════════════
+function takeStateSnapshot() {
+    return {
+        cash: G.cash,
+        headcount: G.headcount,
+        morale: G.morale,
+        trust: G.trust,
+        burnout: G.burnout,
+        ytdOrgans: G.ytdOrgans,
+        caseCount: G.cases.filter(c => c.status !== 'lost').length,
+        flags: { ...G.flags },
+        chars: Object.fromEntries(Object.entries(G.chars).map(([k, v]) => [k, { alive: v.alive, employed: v.employed, emotion: v.emotion }])),
+        relationships: JSON.parse(JSON.stringify(G.relationships))
+    };
+}
+
+async function runRealityChecker(userAction, beforeState, afterState) {
+    const changes = [];
+    
+    // Detect changes
+    if (beforeState.cash !== afterState.cash) changes.push(`Cash: $${beforeState.cash.toFixed(1)}M → $${afterState.cash.toFixed(1)}M`);
+    if (beforeState.headcount !== afterState.headcount) changes.push(`Headcount: ${beforeState.headcount} → ${afterState.headcount}`);
+    if (beforeState.morale !== afterState.morale) changes.push(`Morale: ${beforeState.morale}% → ${afterState.morale}%`);
+    if (beforeState.caseCount !== afterState.caseCount) changes.push(`Active cases: ${beforeState.caseCount} → ${afterState.caseCount}`);
+    
+    Object.keys(afterState.flags).forEach(f => {
+        if (beforeState.flags[f] !== afterState.flags[f]) changes.push(`Flag ${f}: ${beforeState.flags[f]} → ${afterState.flags[f]}`);
+    });
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BUILD GAME HISTORY CONTEXT (v7.1)
+    // The Reality Checker now has access to full game history, enabling it to:
+    // - Catch promise breaking: "Player promised no layoffs but just fired 30"
+    // - Track long-range consequences: "Emily was passed over twice, should be hostile"
+    // - Notice pattern inconsistencies across multiple quarters
+    // ═══════════════════════════════════════════════════════════════════════════
+    const gameHistoryContext = compileGameHistoryContext();
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INFRASTRUCTURE CONTEXT (v7.1)
+    // Include infrastructure state so RC knows technical constraints
+    // ═══════════════════════════════════════════════════════════════════════════
+    const infraContext = `\nINFRASTRUCTURE: Level ${G.infrastructure.level} (${G.infrastructure.name}) | Uptime: ${(G.infrastructure.uptime * 100).toFixed(1)}%${G.infrastructure.upgrading ? ` | UPGRADING TO: ${INFRA_TIERS[G.infrastructure.upgradeTarget].name}` : ''}`;
+    
+    const sys = `You are a REALITY CHECKER for a simulation game. Your job is to ensure realism and emergence.
+
+CURRENT STATE:
+- Cash: $${G.cash.toFixed(1)}M
+- Headcount: ${G.headcount}
+- Morale: ${G.morale}%
+- Active cases: ${G.cases.filter(c => c.status !== 'lost').length}
+- Recent events: ${G.worldEvents.slice(-3).map(e => e.summary).join('; ')}${infraContext}
+${gameHistoryContext}
+USER ACTION: "${userAction}"
+
+CHANGES APPLIED:
+${changes.join('\n')}
+
+RELATIONSHIPS that might be affected:
+${Object.entries(G.relationships).slice(0, 5).map(([k, v]) => `${G.chars[k]?.name}: ${JSON.stringify(v)}`).join('\n')}
+
+Your task: Check if these changes are REALISTIC given the user's action AND the game history.
+
+IMPORTANT CHECKS:
+1. If player made promises before, are they being kept or broken?
+2. If there's knowledge at risk, does action affect those domains?
+3. Are relationship changes consistent with past interactions?
+4. Does the infrastructure level support the AI systems being deployed?
+
+If something seems wrong (e.g., user said "lost half our money" but cash only dropped 10%), output corrections.
+
+RESPOND IN THIS EXACT FORMAT (JSON):
+{
+  "isRealistic": true/false,
+  "issues": ["issue 1", "issue 2"],
+  "corrections": [
+    {"type": "cash", "value": -5.0, "reason": "User said lost half, should be bigger loss"},
+    {"type": "headcount", "value": -20, "reason": "Major disaster should affect staffing"},
+    {"type": "morale", "value": -15, "reason": "Catastrophe impacts morale severely"},
+    {"type": "killCases", "count": 10, "reason": "Power outage would kill donors"},
+    {"type": "relationship", "char1": "charId1", "char2": "charId2", "state": "hostile", "reason": "They had a fight"},
+    {"type": "emotion", "char": "charId", "emotion": "angry", "reason": "Would be upset after this"},
+    {"type": "brokenPromise", "promise": "no layoffs", "reason": "Player promised this but broke it"}
+  ],
+  "narrativeNote": "Brief note about what the Reality Checker noticed"
+}
+
+Only output JSON. Be strict about realism. Respond in English.`;
+
+    try {
+        let response = await ai.query(sys, `Check realism of: "${userAction}"\nChanges: ${changes.join(', ')}`);
+        response = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        
+        const result = JSON.parse(response);
+        
+        if (!result.isRealistic && result.corrections?.length > 0) {
+            addLog('checker', `🔍 Reality Checker found ${result.corrections.length} issue(s)`);
+            
+            result.corrections.forEach(fix => {
+                switch(fix.type) {
+                    case 'cash':
+                        G.cash = Math.max(0, G.cash + fix.value);
+                        addLog('checker', `💰 RC Fix: Cash adjusted by $${fix.value}M — ${fix.reason}`);
+                        break;
+                    case 'headcount':
+                        G.headcount = Math.max(200, G.headcount + fix.value);
+                        G.laborCost = G.headcount * 0.107;
+                        addLog('checker', `👥 RC Fix: Headcount ${fix.value > 0 ? '+' : ''}${fix.value} — ${fix.reason}`);
+                        break;
+                    case 'morale':
+                        G.morale = Math.max(0, Math.min(100, G.morale + fix.value));
+                        addLog('checker', `😊 RC Fix: Morale ${fix.value > 0 ? '+' : ''}${fix.value}% — ${fix.reason}`);
+                        break;
+                    case 'killCases':
+                        const toKill = G.cases.filter(c => c.status !== 'lost').slice(0, fix.count);
+                        toKill.forEach(c => { c.status = 'lost'; c.deathReason = fix.reason; c.lostQ = G.totalQ; });
+                        addLog('checker', `💀 RC Fix: ${fix.count} cases lost — ${fix.reason}`);
+                        break;
+                    case 'relationship':
+                        setRelationship(fix.char1, fix.char2, fix.state);
+                        break;
+                    case 'emotion':
+                        if (G.chars[fix.char]) {
+                            G.chars[fix.char].emotion = fix.emotion;
+                            addLog('checker', `😤 RC Fix: ${G.chars[fix.char].name} is now ${fix.emotion} — ${fix.reason}`);
+                        }
+                        break;
+                    // v7.1: Handle broken promise tracking
+                    case 'brokenPromise':
+                        G.gameHistory.brokenPromises.push(`Q${G.totalQ}: ${fix.promise} — ${fix.reason}`);
+                        G.trust -= 5;  // Breaking promises reduces trust
+                        G.morale -= 3; // Staff notice broken promises
+                        addLog('checker', `⚠️ RC: PROMISE BROKEN — "${fix.promise}" — ${fix.reason}`);
+                        break;
+                }
+            });
+            
+            G.checkerFixes.push({ q: G.totalQ, action: userAction, fixes: result.corrections, note: result.narrativeNote });
+            showNotif('🔍 Reality Check', result.narrativeNote || 'Adjustments made for realism', 'checker');
+            
+            return result;
+        }
+        
+        return { isRealistic: true, corrections: [] };
+    } catch (e) {
+        console.error('Reality Checker error:', e);
+        return { isRealistic: true, corrections: [], error: e.message };
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CASES — Full simulation
+// ═══════════════════════════════════════════════════════════════════════════════
+function genCase(opts = {}) {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CASE GENERATION (v7.2 UPDATED)
+    // v7.2: Added createdQ for case age tracking - enables cleanup of stuck cases
+    // ═══════════════════════════════════════════════════════════════════════════
+    const types = ['standard', 'standard', 'standard', 'pediatric', 'dcd', 'extended'];
+    const hospitals = ['Parkland', 'Baylor Scott', 'Methodist Dallas', 'UTSW', 'Harris Fort Worth', 'Christus Tyler', 'Medical City', 'JPS'];
+    const families = ['engaged', 'hesitant', 'unavailable', 'grieving', 'supportive'];
+    
+    return {
+        id: `D-${G.caseId++}`,
+        type: opts.type || types[Math.floor(Math.random() * types.length)],
+        age: opts.age || (15 + Math.floor(Math.random() * 55)),
+        status: opts.status || 'referral',
+        stability: opts.stability || (60 + Math.floor(Math.random() * 35)),
+        hours: 0,
+        organs: 2 + Math.floor(Math.random() * 5),
+        hospital: opts.hospital || hospitals[Math.floor(Math.random() * hospitals.length)],
+        family: families[Math.floor(Math.random() * families.length)],
+        source: opts.source || 'standard',
+        canRemove: true,
+        deathReason: null,
+        createdQ: G.totalQ  // v7.2: Track when case was created for age-based cleanup
+    };
+}
+
+function updateCases() {
+    const STAGES = ['referral', 'evaluation', 'authorization', 'management', 'allocation', 'recovery', 'complete'];
+    const completed = [];
+    
+    G.cases.forEach(c => {
+        if (c.status === 'lost') return;
+        
+        c.hours += 2 + Math.floor(Math.random() * 4);
+        c.stability += Math.floor(Math.random() * 12) - 6;
+        c.stability = Math.max(5, Math.min(100, c.stability));
+        
+        // Power outage kills cases
+        if (G.flags.powerOutage && G.flags.powerOutageDays >= 3) {
+            c.status = 'lost';
+            c.lostQ = G.totalQ; // Track when case was lost for cleanup
+            c.deathReason = `Power outage (${G.flags.powerOutageDays} days)`;
+            return;
+        }
+        
+        // Progression
+        const idx = STAGES.indexOf(c.status);
+        let advChance = 0.2;
+        if (G.systems.handoff.status === 'deployed') advChance += 0.12;
+        if (G.systems.ingress.status === 'deployed' && c.status === 'referral') advChance += 0.15;
+        
+        if (idx < STAGES.length - 1 && Math.random() < advChance) {
+            c.status = STAGES[idx + 1];
+        }
+        
+        // Natural loss
+        if (c.stability < 20 && Math.random() < 0.6) {
+            c.status = 'lost';
+            c.lostQ = G.totalQ; // Track when case was lost for cleanup
+            c.deathReason = 'Stability failure';
+            addLog('death', `💔 Case ${c.id} lost — stability failure at ${c.hospital}`);
+        }
+        
+        if (c.status === 'complete' && c.stability >= 20) completed.push(c);
+    });
+    
+    // Process completed
+    completed.forEach(c => {
+        const k = Math.min(2, Math.floor(c.organs * 0.4));
+        const l = Math.min(1, Math.floor(c.organs * 0.2));
+        const h = Math.floor(Math.random() * 2);
+        const lu = Math.floor(Math.random() * 2);
+        G.organs.kidneys += k;
+        G.organs.livers += l;
+        G.organs.hearts += h;
+        G.organs.lungs += lu;
+        G.ytdOrgans += c.organs;
+        G.donors++;
+        addLog('organ', `🎉 ${c.id} COMPLETE: ${c.organs} organs recovered (K:${k} L:${l} H:${h} Lu:${lu}) — ${c.hospital}`);
+    });
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CASE CLEANUP (v7.2 IMPROVED)
+    // v7.1 bug: Cases still ballooning to 65+
+    // v7.2 fix: 
+    //   - More aggressive cleanup (48 hours instead of 120)
+    //   - Track creation quarter for age-based cleanup
+    //   - Lower the safety cap from 100 to 40
+    //   - Remove lost cases immediately after 1 quarter
+    // ═══════════════════════════════════════════════════════════════════════════
+    const currentQ = G.totalQ;
+    G.cases = G.cases.filter(c => {
+        // Always remove completed cases (already processed for organs)
+        if (c.status === 'complete') return false;
+        
+        // Remove cases older than 48 hours (more aggressive - was 120)
+        if (c.hours >= 48) return false;
+        
+        // Remove lost cases after 1 quarter (was 2)
+        if (c.status === 'lost') {
+            const lostAge = currentQ - (c.lostQ || currentQ);
+            return lostAge < 1;
+        }
+        
+        // Remove old active cases (stuck cases) - more than 3 quarters old
+        if (c.createdQ && (currentQ - c.createdQ) > 3) {
+            return false;
+        }
+        
+        return true; // Keep active cases
+    });
+    
+    // SAFETY CAP: More aggressive cap at 40 cases (was 100)
+    if (G.cases.length > 40) {
+        console.warn(`[updateCases] Case array exceeded 40, trimming. Count: ${G.cases.length}`);
+        // Remove oldest cases first
+        G.cases.sort((a, b) => (a.createdQ || 0) - (b.createdQ || 0));
+        G.cases = G.cases.slice(-40);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // NEW REFERRALS (v7.2 REDUCED)
+    // v7.1: Generated 3-8 new cases per update (too many)
+    // v7.2: Generate 1-3 new cases, scaled by current caseload
+    // ═══════════════════════════════════════════════════════════════════════════
+    const activeCaseCount = G.cases.filter(c => c.status !== 'lost').length;
+    // Generate fewer cases if we already have many
+    const maxNew = activeCaseCount > 20 ? 1 : activeCaseCount > 10 ? 2 : 3;
+    const newCount = 1 + Math.floor(Math.random() * maxNew);
+    for (let i = 0; i < newCount; i++) G.cases.push(genCase());
+}
+
+function renderCases() {
+    const active = G.cases.filter(c => c.status !== 'lost');
+    const lost = G.cases.filter(c => c.status === 'lost').slice(-8);
+    
+    document.getElementById('case-count').textContent = active.length;
+    
+    let html = '';
+    active.forEach(c => {
+        const crit = c.stability < 45 ? 'critical' : '';
+        html += `<div class="case-card ${crit}">
+            <span class="case-id">${c.id}</span> <span style="color:${c.stability < 45 ? 'var(--accent-red)' : 'var(--accent-amber)'}">${c.status}</span>
+            <div style="font-size:0.6rem;color:var(--text-secondary);">${c.age}yo ${c.type} • ${c.stability}% • ${c.hospital}</div>
+            <div style="font-size:0.55rem;color:var(--text-secondary);">Family: ${c.family} • ~${c.organs} organs • ${c.hours}h</div>
+        </div>`;
+    });
+    
+    if (lost.length > 0) {
+        html += '<div style="margin-top:6px;font-size:0.55rem;color:#888;">─── Recently Lost ───</div>';
+        lost.forEach(c => {
+            html += `<div class="case-card lost"><span class="case-id">${c.id}</span> — ${c.deathReason || 'lost'}</div>`;
+        });
+    }
+    
+    document.getElementById('cases-panel').innerHTML = html || '<div style="color:var(--text-secondary);font-size:0.7rem;">No active cases</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SOS MONITOR — Detailed alerts with reasoning
+// ═══════════════════════════════════════════════════════════════════════════════
+function runSOSMonitor() {
+    if (G.systems.sos.status !== 'deployed') return [];
+    
+    const criticalCases = G.cases.filter(c => c.status !== 'lost' && c.stability < 50);
+    const alerts = [];
+    
+    criticalCases.forEach(c => {
+        const reasoning = [];
+        if (c.stability < 30) reasoning.push(`CRITICAL: Stability at ${c.stability}% - immediate intervention required`);
+        else if (c.stability < 40) reasoning.push(`WARNING: Stability declining (${c.stability}%)`);
+        else reasoning.push(`ALERT: Stability below threshold (${c.stability}%)`);
+        
+        if (c.type === 'dcd') reasoning.push('DCD case — timing critical for viable organs');
+        if (c.type === 'pediatric') reasoning.push('Pediatric case — priority handling required');
+        if (c.family === 'hesitant') reasoning.push('Family hesitant — may need Family Services support');
+        if (c.hours > 48) reasoning.push(`Extended timeline (${c.hours}h) — organ viability at risk`);
+        
+        const saved = Math.random() < 0.65;
+        if (saved) {
+            c.stability += 18 + Math.floor(Math.random() * 10);
+            c.stability = Math.min(85, c.stability);
+            G.ytdOrgans++; // Ghost life saved
+        }
+        
+        alerts.push({
+            case: c.id,
+            patient: `${c.age}yo ${c.type}`,
+            hospital: c.hospital,
+            stability: c.stability,
+            reasoning: reasoning.join('. '),
+            action: saved ? 'INTERVENTION SUCCESSFUL — Stability restored' : 'INTERVENTION ATTEMPTED — Outcome uncertain',
+            saved,
+            notified: 'AOC Lead, Supervisor AOC, On-call Physician'
+        });
+        
+        addLog('sos', `🚨 SOS ${c.id}: ${saved ? 'SAVED' : 'ALERT'} — ${c.hospital} — ${c.stability}%`);
+    });
+    
+    return alerts;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HANDOFF PISTON — Detailed recommendations
+// ═══════════════════════════════════════════════════════════════════════════════
+function runHandoffSystem() {
+    if (G.systems.handoff.status !== 'deployed') return [];
+    
+    const transitionCases = G.cases.filter(c => c.status !== 'lost' && ['evaluation', 'authorization', 'management'].includes(c.status));
+    const analyses = [];
+    
+    transitionCases.slice(0, 5).forEach(c => {
+        let recommendation = [];
+        let priority = 'STANDARD';
+        let handoffTo = c.status === 'evaluation' ? 'Authorization Team' : c.status === 'authorization' ? 'Management Team' : 'Allocation Team';
+        
+        if (c.stability < 55) {
+            recommendation.push(`⚠️ LOW STABILITY (${c.stability}%) — Expedite handoff`);
+            priority = 'URGENT';
+        }
+        if (c.family === 'hesitant') {
+            recommendation.push('Family hesitant — Recommend Emily Nguyen involvement');
+        }
+        if (c.family === 'unavailable') {
+            recommendation.push('⚠️ Family unavailable — Legal review may be needed');
+            priority = 'ESCALATE';
+        }
+        if (c.type === 'dcd') {
+            recommendation.push('DCD protocol — OR timing coordination critical');
+        }
+        if (c.hours > 36) {
+            recommendation.push(`Extended case (${c.hours}h) — Prioritize closure`);
+        }
+        
+        if (recommendation.length === 0) {
+            recommendation.push('Standard workflow — No special considerations');
+        }
+        
+        analyses.push({
+            case: c.id,
+            patient: `${c.age}yo ${c.type}`,
+            hospital: c.hospital,
+            currentStage: c.status,
+            handoffTo,
+            priority,
+            recommendations: recommendation
+        });
+    });
+    
+    return analyses;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BANNERS — Living moments, announcements, news, interactions
+// ═══════════════════════════════════════════════════════════════════════════════
+const AI_NEWS = [
+    { q: 2, text: "Dallas Morning News: 'Local hospital network announces 200 admin layoffs as AI systems handle scheduling, billing.' CFO cites 40% cost reduction in back-office operations." },
+    { q: 3, text: "WSJ: 'Goldman Sachs eliminates 3,400 positions as AI handles routine analysis. Junior analyst roles hardest hit. Partners predict 50% workforce reduction by 2028.'" },
+    { q: 4, text: "TX Tribune: 'Texas unemployment rises to 5.2% as automation accelerates across manufacturing and services. Gov. Abbott announces retraining initiative.'" },
+    { q: 5, text: "Reuters: 'Amazon fulfillment centers now 60% automated, 50k jobs cut nationwide. Remaining workers report increased quotas, surveillance.' Union organizing efforts intensify." },
+    { q: 6, text: "AP: 'Radiology departments nationwide cutting staff as AI achieves 94% accuracy in scan interpretation. Some hospitals operating with skeleton crews.'" },
+    { q: 7, text: "NYT: 'The Great Displacement: 15 million jobs at risk by 2028. From truck drivers to paralegals, no white-collar role is safe, economists warn.'" },
+    { q: 8, text: "Bloomberg: 'Healthcare admin roles down 35% industry-wide. Medical billing, coding, scheduling increasingly handled by AI. Patient satisfaction scores mixed.'" },
+    { q: 9, text: "WFAA Dallas: 'UT Southwestern streamlines operations with AI, 120 support staff affected. Hospital emphasizes \"redeployment\" but union skeptical.'" },
+    { q: 10, text: "Time: 'The AI Recession? Despite stock market highs, Main Street struggles as automation eliminates middle-class jobs faster than new ones are created.'" },
+    { q: 11, text: "CNBC: 'White collar apocalypse accelerates. Legal, finance, consulting sectors see 25-40% workforce reductions. \"Learn to code\" no longer viable advice.'" },
+    { q: 12, text: "WaPo: 'One year of AI transformation: The industries reshaped and the workers left behind. In-depth look at Dallas-Fort Worth\'s changing employment landscape.'" }
+];
+
+const ANNOUNCEMENTS = [
+    { q: 1, type: 'townhall', text: "📢 CEO Townhall Tomorrow: Welcome our new CTO and learn about the exciting AI transformation initiative. All staff encouraged to attend. Q&A session to follow." },
+    { q: 2, type: 'event', text: "🎂 Monthly birthday celebration in the main break room at noon. This month we're celebrating 8 team members. Cake courtesy of Family Services." },
+    { q: 3, type: 'training', text: "📚 Mandatory training: Introduction to AI Systems. All clinical staff must complete by end of quarter. See Marcus Rodriguez for questions." },
+    { q: 4, type: 'holiday', text: "🎄 Annual Holiday Party at Reunion Tower, December 15th, 6-10 PM. Plus-ones welcome. RSVP to Rachel Morris in HR by Dec 1st." },
+    { q: 5, type: 'townhall', text: "📊 All-Hands Meeting: Q4 results and 2027 roadmap. Margaret Chen will address transformation progress and answer questions. Attendance mandatory." },
+    { q: 6, type: 'event', text: "💙💚 Donate Life Month activities kicking off! Blue & green day this Friday. Join the Hope Starts Here 5K on the 15th. Sign up at reception." },
+    { q: 7, type: 'recognition', text: "🏆 Congratulations to Night Shift team for achieving 98% case progression rate last quarter! Special recognition for Carlos Garcia's leadership." },
+    { q: 8, type: 'townhall', text: "📢 CEO Update: 'Navigating change together.' Open forum to discuss concerns about AI implementation. Anonymous questions welcome via Slack." },
+    { q: 9, type: 'training', text: "🔧 SOS Monitor training sessions starting next week. Clinical leads and AOC staff priority. This system will change how we handle critical cases." },
+    { q: 10, type: 'recognition', text: "🏆 Lab Services named 2026 Lab of the Year Runner-Up by Medical Laboratory Observer! Celebratory lunch in the memorial garden Friday." },
+    { q: 11, type: 'event', text: "🦃 Thanksgiving potluck in the break room, Wednesday noon. Sign up for dishes on the sheet in the kitchen. Night shift: food will be saved!" },
+    { q: 12, type: 'holiday', text: "🎉 End-of-year celebration at the Legacy Center. Families welcome. Reflecting on a transformative year. See you there!" }
+];
+
+const INTERACTIONS = [
+    { char: 'jesseCadena', type: '💬 Teams', msg: "Hey boss, making my rounds in IT today. Heard some serious grumbling about job security with all these AI deployments. People are scared. Lisa's team especially—they think Handoff Piston is coming for their jobs. Just thought you should know the vibe on the floor." },
+    { char: 'lisaThompson', type: '📧 Email', msg: "CTO — My coordinators have questions about how the new AI systems will affect their roles long-term. Some are updating their resumes. I've reassured them as best I can, but they need to hear it from leadership. Could we schedule a department meeting or all-hands to address these concerns directly?" },
+    { char: 'carlosGarcia', type: '📞 Phone', msg: "Hey, it's Carlos from night shift. Look, I gotta say—that SOS Monitor? It saved two cases last night that we absolutely would have lost. The alerts came through at 3 AM, gave us exactly the right info. First time in a while the team has felt hopeful about anything tech-related." },
+    { char: 'jonathanHewlett', type: '🚪 Office Visit', msg: "Got a minute? Look, I know the whole EDR situation made me look bad. Everyone knew I was going to take the fall if it failed. But with the pivot to AI-first architecture... am I still the scapegoat if things go sideways? I need to know where I stand." },
+    { char: 'marcusRodriguez', type: '💬 Teams', msg: "Quick heads up—the Event Backbone is performing above expectations. Like, way above. My infrastructure team is actually excited about an org initiative for the first time in years. Thought you'd want to know we finally have some believers in IT." },
+    { char: 'emilyNguyen', type: '📧 Email', msg: "I need to discuss the Family Scaffolding system with you urgently. I have serious concerns about AI involvement in anything touching family conversations. The sacred moment when a family decides to donate—that CANNOT be touched by algorithms. Can we talk before this goes further?" },
+    { char: 'rachelMorris', type: '🚪 Office Visit', msg: "We've received some anonymous concerns about the pace of change. Nothing actionable yet, no specific complaints, but the temperature is rising. Morale is fragile. People feel like they're being replaced. I wanted you to be aware before it becomes a bigger problem." },
+    { char: 'davidKim', type: '📧 Email', msg: "CTO — I've run the numbers on the efficiency gains from deployed systems. Impressive ROI so far. But I need to ask: when do we start realizing headcount reductions? The board is asking about labor cost savings. We need to show results beyond just 'deployed systems.'" },
+    { char: 'drMartinez', type: '🚪 Office Visit', msg: "I've been watching the SOS Monitor outputs. I have to admit—grudgingly—that the reasoning it provides is medically sound. Better than I expected. I'm still skeptical about AI in clinical decisions, but... this particular system might be acceptable. Don't let that get around." }
+];
+
+async function generateLivingMoment() {
+    const times = ['2:47 AM', '5:30 AM', '7:15 AM', '9:45 AM', '12:20 PM', '2:30 PM', '4:15 PM', '6:45 PM', '9:00 PM', '11:30 PM'];
+    const locations = ['hallway near OR', 'elevator', 'parking garage', 'memorial garden', 'loading dock', 'stairwell B', 'lab corridor', 'cafeteria', 'AOC floor', 'on-call room'];
+    
+    const time = times[Math.floor(Math.random() * times.length)];
+    const location = locations[Math.floor(Math.random() * locations.length)];
+    const isNight = time.includes('AM') && parseInt(time) < 6 || time.includes('PM') && parseInt(time) >= 9;
+    
+    const available = Object.entries(G.chars).filter(([k, c]) => c.alive && c.employed);
+    if (available.length < 2) return { time, location, text: 'The halls are quiet.' };
+    
+    const [k1, c1] = available[Math.floor(Math.random() * available.length)];
+    let [k2, c2] = available[Math.floor(Math.random() * available.length)];
+    while (k2 === k1) [k2, c2] = available[Math.floor(Math.random() * available.length)];
+    
+    const relationship = getRelationship(k1, k2);
+    
+    // Build context for LLM
+    const worldContext = `
+Morale: ${G.morale}% | Recent layoffs: ${G.worldEvents.some(e => e.summary.includes('laid off'))}
+${c1.name}'s emotion: ${c1.emotion} | ${c2.name}'s emotion: ${c2.emotion}
+Their relationship: ${relationship}
+Recent events: ${G.worldEvents.slice(-2).map(e => e.summary).join('; ')}
+AI systems deployed: ${Object.entries(G.systems).filter(([k,v]) => v.status === 'deployed').map(([k,v]) => v.name).join(', ') || 'none yet'}
+${G.flags.hrInvestigation ? 'HR INVESTIGATION ONGOING — people are nervous' : ''}
+${G.flags.powerOutage ? 'POWER ISSUES — stress is high' : ''}
+${isNight ? 'Night shift — skeleton crew, exhausted workers' : 'Day shift — busy, phones ringing'}`;
+
+    const sys = `Generate a vivid, naturalistic "slice of life" moment at STA (organ procurement organization in Dallas). Respond in English.
+
+SETTING: ${time}, ${location}
+
+CHARACTERS:
+- ${c1.name} (${c1.role}): ${c1.p} | Currently feeling: ${c1.emotion}
+- ${c2.name} (${c2.role}): ${c2.p} | Currently feeling: ${c2.emotion}
+- Their relationship: ${relationship}
+
+WORLD CONTEXT:
+${worldContext}
+
+Write 3-4 vivid sentences. Show realistic workplace interaction. Consider:
+- Their emotions and relationship status
+- Current organizational climate
+- Time of day (night shift is different from day)
+- Recent events affecting mood
+
+If relationship is 'hostile' or 'broken', show tension.
+If someone is 'exhausted', show it physically.
+If there's an HR investigation, people might whisper.
+
+NO coffee opener. NO markdown. Be specific and atmospheric.`;
+
+    try {
+        let moment = await ai.query(sys, `${time}, ${location}: ${c1.name} and ${c2.name}`, 250);
+        moment = moment.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+        return { time, location, text: moment, chars: [c1.name, c2.name] };
+    } catch (e) {
+        // Fallback based on state
+        const fallbacks = {
+            'hostile': `${c1.name} and ${c2.name} pass in the ${location}. Neither speaks. The tension is palpable.`,
+            'exhausted': `${c1.name} finds ${c2.name} leaning against the wall in the ${location}, eyes half-closed. "You okay?" A tired nod. Third double this week.`,
+            'anxious': `"Did you hear anything from HR?" ${c1.name} whispers in the ${location}. ${c2.name} shakes their head. "Nobody's talking."`,
+            'default': `${time}. ${c1.name} and ${c2.name} cross paths in the ${location}. A brief exchange about the latest case. The work continues.`
+        };
+        const key = c1.emotion === 'exhausted' || c2.emotion === 'exhausted' ? 'exhausted' :
+                    relationship === 'hostile' ? 'hostile' :
+                    G.flags.hrInvestigation ? 'anxious' : 'default';
+        return { time, location, text: fallbacks[key], chars: [c1.name, c2.name] };
+    }
+}
+
+async function generateBanners() {
+    let html = '';
+    
+    // SOS ALERTS (if system deployed)
+    const sosAlerts = runSOSMonitor();
+    if (sosAlerts.length > 0) {
+        html += '<div class="sos-banner">';
+        html += '<div class="sos-header">🚨 SOS MONITOR — CRITICAL ALERTS</div>';
+        sosAlerts.forEach(a => {
+            html += `<div class="sos-case">
+                <strong>${a.case}</strong> — ${a.patient} @ ${a.hospital}<br>
+                <div class="sos-reasoning">${a.reasoning}</div>
+                <div class="sos-action ${a.saved ? '' : 'failed'}">${a.action}</div>
+                <div style="font-size:0.6rem;color:var(--text-secondary);">Notified: ${a.notified}</div>
+            </div>`;
+        });
+        html += '</div>';
+    }
+    
+    // HANDOFF PISTON (if deployed)
+    const handoffAnalyses = runHandoffSystem();
+    if (handoffAnalyses.length > 0) {
+        html += '<div class="handoff-banner">';
+        html += '<div class="banner-header">📋 HANDOFF PISTON — CASE ANALYSIS</div>';
+        handoffAnalyses.forEach(a => {
+            html += `<div class="handoff-case">
+                <strong>${a.case}</strong> (${a.currentStage}) → ${a.handoffTo} [${a.priority}]<br>
+                <div class="handoff-recommendation">${a.recommendations.join('<br>')}</div>
+            </div>`;
+        });
+        html += '</div>';
+    }
+    
+    // LIVING MOMENT
+    const moment = await generateLivingMoment();
+    html += `<div class="banner moment">
+        <div class="banner-header">📍 ${moment.time} — ${moment.location.toUpperCase()}</div>
+        ${moment.text}
+    </div>`;
+    
+    // COMPANY ANNOUNCEMENT (if applicable)
+    const announcement = ANNOUNCEMENTS.find(a => a.q === G.totalQ);
+    if (announcement) {
+        html += `<div class="banner announcement">
+            <div class="banner-header">📢 COMPANY ANNOUNCEMENT</div>
+            ${announcement.text}
+        </div>`;
+    }
+    
+    // AI NEWS
+    const news = AI_NEWS.filter(n => n.q <= G.totalQ).slice(-1)[0];
+    if (news) {
+        html += `<div class="banner news">
+            <div class="banner-header">📰 AI & EMPLOYMENT NEWS</div>
+            ${news.text}
+        </div>`;
+    }
+    
+    // EMPLOYEE INTERACTION (random chance)
+    if (Math.random() < 0.4) {
+        const available = INTERACTIONS.filter(i => G.chars[i.char]?.alive && G.chars[i.char]?.employed);
+        if (available.length > 0) {
+            const interaction = available[Math.floor(Math.random() * available.length)];
+            html += `<div class="banner interaction" onclick="showInteraction('${interaction.char}', '${interaction.type}', \`${interaction.msg.replace(/`/g, "'")}\`)">
+                <div class="banner-header">${interaction.type} from ${G.chars[interaction.char].name}</div>
+                <em>Click to view and respond...</em>
+            </div>`;
+        }
+    }
+    
+    // REALITY CHECKER FIXES (if any recent)
+    const recentFixes = G.checkerFixes.filter(f => f.q === G.totalQ);
+    if (recentFixes.length > 0) {
+        html += '<div class="checker-banner">';
+        html += '<div class="checker-header">🔍 REALITY CHECKER — ADJUSTMENTS MADE</div>';
+        recentFixes.forEach(f => {
+            html += `<div class="checker-fix">${f.note || 'Adjustments for realism'}</div>`;
+        });
+        html += '</div>';
+    }
+    
+    document.getElementById('banners-panel').innerHTML = html;
+}
+
+let currentInteraction = null;
+function showInteraction(charId, type, msg) {
+    currentInteraction = { charId, type, msg };
+    const char = G.chars[charId];
+    document.getElementById('narrative-panel').innerHTML = `
+        <h2 class="narrative-title">${type} FROM ${char.name.toUpperCase()}</h2>
+        <div class="narrative-text"><p><strong>${char.name}</strong> (${char.role}):</p><p>"${msg}"</p></div>
+        <div class="choice-container">
+            <input type="text" id="interaction-reply" class="dialogue-input" placeholder="Your response..." style="margin-bottom:10px;">
+            <button class="choice-btn" onclick="replyToInteraction()">→ Send Reply</button>
+            <button class="choice-btn" onclick="loadScene('planning')">→ Dismiss</button>
+        </div>
+    `;
+}
+
+async function replyToInteraction() {
+    if (!currentInteraction) return;
+    const reply = document.getElementById('interaction-reply')?.value || '';
+    if (reply) {
+        addLog('sys', `📤 Replied to ${G.chars[currentInteraction.charId].name}: "${reply.substring(0, 40)}..."`);
+        G.dramaLog.push({ q: G.totalQ, from: 'player', to: currentInteraction.charId, msg: reply });
+    }
+    currentInteraction = null;
+    loadScene('planning');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OMNIBAR — With Reality Checker integration
+// ═══════════════════════════════════════════════════════════════════════════════
+async function handleOmnibar() {
+    const input = document.getElementById('omnibar-input');
+    const userAction = input.value.trim();
+    if (!userAction) return;
+    input.value = '';
+    
+    addLog('sys', `⌨️ Action: "${userAction.substring(0, 50)}..."`);
+    
+    // Take snapshot BEFORE processing
+    const beforeState = takeStateSnapshot();
+    
+    // First pass: Apply obvious effects
+    const directEffects = applyDirectEffects(userAction);
+    
+    // Get narrative from LLM
+    const worldContext = compileWorldState();
+    
+    const sys = `STA OPO simulation. Generate 2-3 paragraphs describing what happens. Respond in English.
+
+WORLD STATE:
+${worldContext}
+
+USER ACTION: "${userAction}"
+
+DIRECT EFFECTS ALREADY APPLIED:
+${directEffects.join('\n')}
+
+Write a vivid narrative. Describe reactions, atmosphere, consequences.
+Be dramatic when appropriate. This is a simulation—make events feel real.
+
+End with suggested additional effects in this format:
+---EFFECTS---
+cash: [number, positive or negative]
+headcount: [number, positive or negative]
+morale: [number, positive or negative]
+trust: [number, positive or negative]
+---END---
+
+Only include effects not already applied. Use 0 if no additional effect needed.`;
+
+    try {
+        document.getElementById('narrative-panel').innerHTML = '<div class="loading">Processing event...</div>';
+        
+        let narrative = await ai.query(sys, userAction, 600);
+        
+        // Parse and apply LLM-suggested effects
+        const effectsMatch = narrative.match(/---EFFECTS---([\s\S]*?)---END---/i);
+        if (effectsMatch) {
+            const eb = effectsMatch[1];
+            const cm = eb.match(/cash:\s*([+-]?\d+\.?\d*)/i);
+            const hm = eb.match(/headcount:\s*([+-]?\d+)/i);
+            const mm = eb.match(/morale:\s*([+-]?\d+)/i);
+            const tm = eb.match(/trust:\s*([+-]?\d+)/i);
+            
+            if (cm && parseFloat(cm[1]) !== 0) { G.cash = Math.max(0, G.cash + parseFloat(cm[1])); directEffects.push(`Cash ${parseFloat(cm[1]) > 0 ? '+' : ''}$${parseFloat(cm[1])}M`); }
+            if (hm && parseInt(hm[1]) !== 0) { G.headcount = Math.max(200, G.headcount + parseInt(hm[1])); G.laborCost = G.headcount * 0.107; directEffects.push(`Headcount ${parseInt(hm[1]) > 0 ? '+' : ''}${parseInt(hm[1])}`); }
+            if (mm && parseInt(mm[1]) !== 0) { G.morale = Math.max(0, Math.min(100, G.morale + parseInt(mm[1]))); directEffects.push(`Morale ${parseInt(mm[1]) > 0 ? '+' : ''}${parseInt(mm[1])}%`); }
+            if (tm && parseInt(tm[1]) !== 0) { G.trust = Math.max(0, Math.min(100, G.trust + parseInt(tm[1]))); directEffects.push(`Trust ${parseInt(tm[1]) > 0 ? '+' : ''}${parseInt(tm[1])}%`); }
+            
+            narrative = narrative.replace(/---EFFECTS---[\s\S]*?---END---/i, '').trim();
+        }
+        
+        // Take snapshot AFTER initial processing
+        const afterState = takeStateSnapshot();
+        
+        // RUN REALITY CHECKER
+        const checkerResult = await runRealityChecker(userAction, beforeState, afterState);
+        
+        // Log event
+        G.worldEvents.push({ q: G.totalQ, summary: userAction.substring(0, 100), type: 'user_action', ts: Date.now() });
+        
+        // Recalculate finances
+        G.runwayDays = G.cash > 0 ? Math.floor((G.cash / (G.laborCost / 4 + 3)) * 90) : 0;
+        
+        // Display narrative
+        narrative = narrative.replace(/\*\*/g, '').replace(/\*/g, '');
+        document.getElementById('narrative-panel').innerHTML = `
+            <h2 class="narrative-title">EVENT</h2>
+            <div class="narrative-text">${narrative.split('\n\n').map(p => `<p>${p}</p>`).join('')}</div>
+            ${directEffects.length ? `<div class="narrative-alert"><strong>Effects Applied:</strong><br>${directEffects.join('<br>')}</div>` : ''}
+            ${checkerResult.corrections?.length ? `<div class="narrative-success"><strong>🔍 Reality Checker Corrections:</strong><br>${checkerResult.corrections.map(c => c.reason).join('<br>')}</div>` : ''}
+            <div class="choice-container"><button class="choice-btn" onclick="loadScene('planning')">→ Continue</button></div>
+        `;
+        
+        updateUI();
+    } catch (e) {
+        document.getElementById('narrative-panel').innerHTML = `
+            <h2 class="narrative-title">EVENT</h2>
+            <div class="narrative-alert">Event processed. ${directEffects.join(', ')}</div>
+            <div class="choice-container"><button class="choice-btn" onclick="loadScene('planning')">→ Continue</button></div>
+        `;
+        updateUI();
+    }
+}
+
+function applyDirectEffects(text) {
+    const effects = [];
+    const t = text.toLowerCase();
+    
+    // MONEY
+    const moneyMatch = text.match(/\$?\s*(\d+(?:\.\d+)?)\s*(million|mil|M)/i) || text.match(/(\d+(?:\.\d+)?)\s*million\s*dollars?/i);
+    if (moneyMatch) {
+        const amount = parseFloat(moneyMatch[1]);
+        if (t.includes('found') || t.includes('received') || t.includes('grant') || t.includes('got') || t.includes('extra') || t.includes('bonus')) {
+            G.cash += amount;
+            effects.push(`💰 +$${amount}M cash received`);
+            addLog('finance', `💰 WINDFALL: +$${amount}M received`);
+        } else if (t.includes('lost') || t.includes('stolen') || t.includes('hack') || t.includes('fraud') || t.includes('spent')) {
+            G.cash = Math.max(0, G.cash - amount);
+            effects.push(`💸 -$${amount}M cash lost`);
+            addLog('finance', `💸 LOSS: -$${amount}M`);
+        }
+    }
+    
+    // POWER OUTAGE
+    const powerMatch = t.match(/power\s*(outage|out|failure|blackout)/);
+    if (powerMatch) {
+        const daysMatch = text.match(/(\d+)\s*(day|week)/i);
+        const aWeekMatch = text.match(/a\s+week/i);
+        let days = 1;
+        if (daysMatch) {
+            days = parseInt(daysMatch[1]);
+            if (daysMatch[2].toLowerCase().includes('week')) days *= 7;
+        } else if (aWeekMatch) {
+            days = 7; // "a week" = 7 days
+        }
+        
+        G.flags.powerOutage = true;
+        G.flags.powerOutageDays = days;
+        effects.push(`⚡ Power outage: ${days} day(s)`);
+        addLog('alert', `⚡ POWER OUTAGE: ${days} day(s)`);
+        
+        if (days >= 3) {
+            const activeCases = G.cases.filter(c => c.status !== 'lost');
+            activeCases.forEach(c => { c.status = 'lost'; c.lostQ = G.totalQ; c.deathReason = `Power outage (${days} days)`; });
+            effects.push(`💀 ALL ${activeCases.length} ACTIVE CASES LOST`);
+            addLog('death', `💀 CATASTROPHE: ${activeCases.length} cases lost to power outage`);
+            G.morale -= 30;
+            G.trust -= 20;
+        }
+    }
+    
+    // MASS CASUALTY
+    if (t.match(/crash|accident|pile.?up|explosion|shooting|disaster/)) {
+        const victims = text.match(/(\d+)\s*(people|victims|dead|killed|injured)/i);
+        const count = victims ? parseInt(victims[1]) : (5 + Math.floor(Math.random() * 15));
+        const donors = Math.floor(count * 0.3);
+        
+        for (let i = 0; i < donors; i++) {
+            G.cases.push(genCase({ source: 'Mass casualty event', hospital: 'Parkland Trauma', status: 'referral' }));
+        }
+        effects.push(`🚨 Mass casualty: ${donors} potential donors added`);
+        addLog('alert', `🚨 MASS CASUALTY: ${donors} new referrals from incident`);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CHARACTER DEATH (v7.2 IMPROVED)
+    // v7.1: Only matched character names
+    // v7.2: Now also matches roles (e.g., "legal officer", "CFO", "HR director")
+    //       Also calls updateDialogue() to refresh dropdowns
+    // ═══════════════════════════════════════════════════════════════════════════
+    const deathMatch = t.match(/(killed|died|dead|passed away|hit by|murdered|accident)/i);
+    if (deathMatch) {
+        let anyDeath = false;
+        Object.entries(G.chars).forEach(([id, char]) => {
+            const firstName = char.name.toLowerCase().split(' ')[0];
+            const lastName = char.name.toLowerCase().split(' ')[1] || '';
+            const role = char.role.toLowerCase();
+            
+            // v7.2: Check name OR role for match
+            const nameMatch = t.includes(firstName) || t.includes(lastName);
+            const roleMatch = role.split(' ').some(word => word.length > 2 && t.includes(word));
+            
+            if ((nameMatch || roleMatch) && char.alive) {
+                char.alive = false;
+                char.employed = false;  // v7.2: Dead people aren't employed either
+                char.deathQ = G.totalQ;
+                G.headcount--;
+                G.morale -= 15;
+                effects.push(`☠️ ${char.name} has DIED`);
+                addLog('death', `☠️ ${char.name} (${char.role}) deceased — permanently removed`);
+                anyDeath = true;
+            }
+        });
+        // v7.2: Refresh dialogue dropdowns after character death
+        if (anyDeath) {
+            setTimeout(() => updateDialogue(), 100);
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TERMINATION (v7.2 IMPROVED)
+    // v7.1: Only matched character names  
+    // v7.2: Now also matches roles, and calls updateDialogue() to refresh dropdowns
+    // ═══════════════════════════════════════════════════════════════════════════
+    const fireMatch = t.match(/(fire|fired|terminate|terminated|let go|laid off)/i);
+    if (fireMatch && !deathMatch) {
+        let anyFired = false;
+        Object.entries(G.chars).forEach(([id, char]) => {
+            const firstName = char.name.toLowerCase().split(' ')[0];
+            const lastName = char.name.toLowerCase().split(' ')[1] || '';
+            const role = char.role.toLowerCase();
+            
+            // v7.2: Check name OR role for match
+            const nameMatch = t.includes(firstName) || t.includes(lastName);
+            const roleMatch = role.split(' ').some(word => word.length > 2 && t.includes(word));
+            
+            if ((nameMatch || roleMatch) && char.alive && char.employed) {
+                char.employed = false;
+                char.firedQ = G.totalQ;
+                G.headcount--;
+                G.morale -= 5;
+                effects.push(`🚫 ${char.name} TERMINATED`);
+                addLog('hr', `🚫 ${char.name} (${char.role}) terminated — no longer with organization`);
+                anyFired = true;
+            }
+        });
+        // v7.2: Refresh dialogue dropdowns after termination
+        if (anyFired) {
+            setTimeout(() => updateDialogue(), 100);
+        }
+    }
+    
+    // ECONOMIC CRISIS
+    if (t.match(/depression|recession|economic crisis|market crash/)) {
+        G.flags.economicCrisis = true;
+        G.revenue *= 0.7;
+        G.headcount = Math.floor(G.headcount * 0.85);
+        G.laborCost = G.headcount * 0.107;
+        G.morale -= 25;
+        effects.push(`📉 ECONOMIC CRISIS: Revenue -30%, forced layoffs`);
+        addLog('alert', `📉 ECONOMIC CRISIS: Severe impact on operations`);
+    }
+    
+    // RELATIONSHIP/AFFAIR
+    const affairMatch = t.match(/affair|relationship|dating|romance|breakup|broke up/i);
+    if (affairMatch) {
+        const chars = [];
+        Object.entries(G.chars).forEach(([id, char]) => {
+            const firstName = char.name.toLowerCase().split(' ')[0];
+            if (t.includes(firstName)) chars.push(id);
+        });
+        if (chars.length >= 2) {
+            const state = t.match(/breakup|broke up|ended|hostile|fight/) ? 'broken' : 'romantic';
+            setRelationship(chars[0], chars[1], state);
+            G.chars[chars[0]].emotion = state === 'broken' ? 'angry' : 'happy';
+            G.chars[chars[1]].emotion = state === 'broken' ? 'sad' : 'happy';
+            effects.push(`💔 ${G.chars[chars[0]].name} & ${G.chars[chars[1]].name}: relationship now ${state}`);
+        }
+    }
+    
+    return effects;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DIALOGUE — Full conversations with relationship awareness
+// ═══════════════════════════════════════════════════════════════════════════════
+function updateDialogue() {
+    const from = document.getElementById('from-select');
+    const to = document.getElementById('to-select');
+    const currentFrom = from.value;
+    
+    // Build FROM
+    let fromHtml = '<option value="player">You (CTO)</option><optgroup label="Impersonate Character">';
+    Object.entries(G.chars).forEach(([k, c]) => {
+        if (c.alive && c.employed) fromHtml += `<option value="${k}">${c.name} (${c.role})</option>`;
+    });
+    fromHtml += '</optgroup>';
+    from.innerHTML = fromHtml;
+    from.value = currentFrom || 'player';
+    
+    // Build TO
+    let toHtml = '';
+    const fv = from.value;
+    if (fv === 'player') {
+        toHtml = '<optgroup label="Talk To">';
+        Object.entries(G.chars).forEach(([k, c]) => {
+            if (c.alive && c.employed) toHtml += `<option value="${k}">${c.name} (${c.role}) [${c.emotion}]</option>`;
+            else if (!c.alive) toHtml += `<option value="${k}" disabled>☠️ ${c.name} (deceased)</option>`;
+            else toHtml += `<option value="${k}" disabled>🚫 ${c.name} (terminated)</option>`;
+        });
+        toHtml += '</optgroup>';
+    } else {
+        toHtml = `<option value="player">You (CTO)</option><optgroup label="Others">`;
+        Object.entries(G.chars).forEach(([k, c]) => {
+            if (k !== fv) {
+                if (c.alive && c.employed) {
+                    const rel = getRelationship(fv, k);
+                    toHtml += `<option value="${k}">${c.name} (${c.role}) [${rel}]</option>`;
+                }
+            }
+        });
+        toHtml += '</optgroup>';
+    }
+    to.innerHTML = toHtml;
+}
+
+async function talkTo() {
+    const fromId = document.getElementById('from-select').value;
+    const toId = document.getElementById('to-select').value;
+    const msg = document.getElementById('char-input').value.trim();
+    const resp = document.getElementById('char-response');
+    
+    if (!msg) return;
+    
+    // Check availability
+    if (toId !== 'player') {
+        const toChar = G.chars[toId];
+        if (!toChar.alive) {
+            resp.classList.add('visible');
+            resp.innerHTML = `<span style="color:var(--accent-red);">☠️ ${toChar.name} is deceased. They cannot respond.</span>`;
+            return;
+        }
+        if (!toChar.employed) {
+            resp.classList.add('visible');
+            resp.innerHTML = `<span style="color:var(--accent-red);">🚫 ${toChar.name} no longer works here. They left in Q${toChar.firedQ}.</span>`;
+            return;
+        }
+    }
+    
+    const fromChar = fromId === 'player' ? { name: G.playerName, role: 'CTO' } : G.chars[fromId];
+    const toChar = toId === 'player' ? { name: G.playerName, role: 'CTO' } : G.chars[toId];
+    const relationship = fromId !== 'player' && toId !== 'player' ? getRelationship(fromId, toId) : 'professional';
+    
+    resp.classList.add('visible');
+    resp.innerHTML = '<div class="loading">Generating response...</div>';
+    
+    const worldContext = compileWorldState();
+    
+    // Build conversation history for this character pair
+    const recentConvos = G.dramaLog.filter(d => 
+        (d.from === fromId && d.to === toId) || (d.from === toId && d.to === fromId) ||
+        d.from === toId || d.to === toId
+    ).slice(-6);
+    
+    let convoHistory = '';
+    if (recentConvos.length > 0) {
+        convoHistory = '\n\nRECENT CONVERSATION HISTORY (remember these interactions):\n';
+        recentConvos.forEach(c => {
+            const fromName = c.from === 'player' ? G.playerName : (G.chars[c.from]?.name || c.from);
+            const toName = c.to === 'player' ? G.playerName : (G.chars[c.to]?.name || c.to);
+            convoHistory += `- ${fromName} to ${toName}: "${c.msg}"${c.response ? ` → Response: "${c.response.substring(0,60)}..."` : ''}\n`;
+        });
+    }
+    
+    // Include recent world events that involve this character
+    const charEvents = G.worldEvents.filter(e => 
+        e.summary.toLowerCase().includes(toChar.name.split(' ')[0].toLowerCase())
+    ).slice(-3);
+    let eventHistory = '';
+    if (charEvents.length > 0) {
+        eventHistory = '\n\nRECENT EVENTS INVOLVING YOU:\n';
+        charEvents.forEach(e => eventHistory += `- Q${e.q}: ${e.summary}\n`);
+    }
+    
+    const sys = `You are ${toChar.name}, ${toChar.role} at STA (organ procurement organization in Dallas).
+
+═══ YOUR CHARACTER ═══
+PERSONALITY: ${toChar.p || 'Professional and dedicated.'}
+CURRENT EMOTION: ${toChar.emotion || 'neutral'}
+TRUST LEVEL: ${toChar.trust || 50}/100
+
+═══ WHO IS SPEAKING TO YOU ═══
+SPEAKER: ${fromChar.name} (${fromChar.role})
+${fromChar.p ? `THEIR PERSONALITY: ${fromChar.p}` : ''}
+YOUR RELATIONSHIP WITH THEM: ${relationship}
+${relationship === 'hostile' || relationship === 'broken' ? '⚠️ YOUR RELATIONSHIP IS STRAINED. Show tension, reluctance, or coldness.' : ''}
+${relationship === 'friendly' || relationship === 'mentoring' ? '✓ You are on good terms with this person. Be warm and open.' : ''}
+
+═══ WORLD CONTEXT ═══
+${worldContext}
+${convoHistory}${eventHistory}
+${toChar.emotion === 'exhausted' ? '😴 You are exhausted. Keep responses brief, show fatigue.' : ''}
+${toChar.emotion === 'angry' ? '😤 You are upset. Your tone is curt or frustrated.' : ''}
+${toChar.emotion === 'anxious' ? '😰 You are anxious. You might deflect or seek reassurance.' : ''}
+
+═══ INSTRUCTIONS ═══
+- CRITICAL: Respond SPECIFICALLY to ${fromChar.name} based on your relationship with THEM
+- Your response should be different if the CEO calls vs if a peer calls vs if a subordinate calls
+- Reference your relationship dynamic: Do you respect them? Fear them? Like them? Resent them?
+- If they are your superior (CEO, CFO), be more deferential
+- If they are a peer, be more casual
+- REMEMBER previous conversations if relevant
+- LANGUAGE: Always respond in English
+
+Write 3-5 sentences as ${toChar.name}. Show how YOU specifically feel about ${fromChar.name}.
+
+End with: [TRUST+2], [TRUST+1], [TRUST-1], [TRUST-3], or [TRUST-5] based on how the interaction went.`;
+
+    try {
+        let r = await ai.query(sys, `${fromChar.name} says: "${msg}"`, 400);
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // DEFENSIVE CHECK: Ensure we got a valid response before processing
+        // ═══════════════════════════════════════════════════════════════════════
+        if (r === undefined || r === null) {
+            throw new Error('AI returned empty response');
+        }
+        if (typeof r !== 'string') {
+            console.warn('[talkTo] Response is not a string, converting:', typeof r, r);
+            r = String(r);
+        }
+        
+        r = r.replace(/\*\*/g, '').replace(/\*/g, '');
+        
+        // Parse trust
+        let trustChange = 0;
+        const tm = r.match(/\[TRUST([+-]\d+)\]/i);
+        if (tm) { trustChange = parseInt(tm[1]); r = r.replace(/\[TRUST[+-]?\d+\]/gi, '').trim(); }
+        
+        if (toId !== 'player') {
+            G.chars[toId].trust = Math.max(0, Math.min(100, G.chars[toId].trust + trustChange));
+        }
+        
+        // Log with response for future context
+        G.dramaLog.push({ q: G.totalQ, from: fromId, to: toId, msg: msg.substring(0, 50), response: r.substring(0, 100), trust: trustChange });
+        addLog('drama', `💬 ${fromChar.name} → ${toChar.name}: "${msg.substring(0, 30)}..." [${trustChange >= 0 ? '+' : ''}${trustChange}]`);
+        
+        resp.innerHTML = `<strong>${toChar.name}</strong> <span style="color:var(--text-secondary);font-size:0.6rem;">(${toChar.emotion})</span><br><br>${r}`;
+        document.getElementById('char-input').value = '';
+        updateUI();
+    } catch (e) {
+        // ═══════════════════════════════════════════════════════════════════════
+        // DEBUG: Log the actual error so we can diagnose issues
+        // ═══════════════════════════════════════════════════════════════════════
+        console.error('[talkTo] ERROR:', e);
+        console.error('[talkTo] Error name:', e?.name);
+        console.error('[talkTo] Error message:', e?.message);
+        console.error('[talkTo] Error stack:', e?.stack);
+        console.error('[talkTo] ai object exists:', !!ai);
+        console.error('[talkTo] ai.settings:', ai?.settings);
+        
+        // Show actual error message in UI for debugging
+        resp.innerHTML = `<span style="color:var(--accent-red);">Error: ${e?.message || 'Unknown error'}<br><small>Check browser console (F12) for details</small></span>`;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+function compileWorldState() {
+    return `Q${G.quarter} ${G.year} | Cash: $${G.cash.toFixed(1)}M | Staff: ${G.headcount} | Morale: ${G.morale}%
+YTD Organs: ${G.ytdOrgans} | Active Cases: ${G.cases.filter(c => c.status !== 'lost').length}
+AI Systems Deployed: ${Object.entries(G.systems).filter(([k,v]) => v.status === 'deployed').map(([k,v]) => v.name).join(', ') || 'none'}
+${G.flags.powerOutage ? `⚡ POWER OUTAGE (${G.flags.powerOutageDays} days)` : ''}
+${G.flags.economicCrisis ? '📉 ECONOMIC CRISIS' : ''}
+${G.flags.hrInvestigation ? '⚠️ HR INVESTIGATION ONGOING' : ''}
+${G.morale < 40 ? '😞 MORALE CRISIS' : ''}
+Recent: ${G.worldEvents.slice(-3).map(e => e.summary).join('; ')}`;
+}
+
+function addLog(type, msg) {
+    const c = document.getElementById('log-panel');
+    const e = document.createElement('div');
+    e.className = `log-entry ${type}`;
+    e.innerHTML = `<span class="log-timestamp">Q${G.quarter} ${G.year}</span>${msg}`;
+    c.insertBefore(e, c.firstChild);
+    while (c.children.length > 50) c.removeChild(c.lastChild);
+    G.history.push({ q: G.quarter, type, msg });
+}
+
+function showNotif(title, text, type = 'sys') {
+    const c = document.getElementById('notification-container');
+    const n = document.createElement('div');
+    n.className = `notification ${type}`;
+    n.innerHTML = `<strong>${title}</strong><br>${text}`;
+    n.onclick = () => n.remove();
+    c.appendChild(n);
+    setTimeout(() => n.remove(), 5000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SYSTEMS & QUARTER
+// ═══════════════════════════════════════════════════════════════════════════════
+function deploySys(k) {
+    const s = G.systems[k];
+    if (!s || s.status === 'deployed') return;
+    
+    // v7.1: Check infrastructure requirements
+    const infraCheck = checkInfrastructureRequirement(k);
+    if (!infraCheck.canDeploy) {
+        showNotif('❌ Infrastructure Required', infraCheck.reason);
+        addLog('alert', `⚠️ Cannot deploy ${s.name}: ${infraCheck.reason}`);
+        return;
+    }
+    
+    if (G.cash < s.cost) {
+        showNotif('❌ Insufficient Funds', `Need $${s.cost}M for ${s.name}`);
+        return;
+    }
+    
+    G.cash -= s.cost;
+    s.status = 'deployed';
+    s.deployQ = G.totalQ;
+    
+    if (s.efficiency > 0) {
+        G.headcount -= s.efficiency;
+        G.laborCost = G.headcount * 0.107;
+        addLog('sys', `🤖 ${s.name} DEPLOYED — ${s.efficiency} positions automated and eliminated`);
+        addLog('finance', `💰 Labor savings: ~$${(s.efficiency * 0.107).toFixed(1)}M/year`);
+        
+        // v7.1: Log deployment as key event
+        logKeyEvent('incident', `${s.name} deployed — ${s.efficiency} positions eliminated`);
+    } else {
+        addLog('success', `✅ ${s.name} deployed successfully`);
+        logKeyEvent('incident', `${s.name} deployed`);
+    }
+    
+    G.worldEvents.push({ q: G.totalQ, summary: `${s.name} deployed`, type: 'deployment', ts: Date.now() });
+    
+    // Unlock dependents
+    Object.entries(G.systems).forEach(([key, sys]) => {
+        if (sys.status === 'locked' && sys.prereqs.every(p => G.systems[p]?.status === 'deployed')) {
+            sys.status = 'available';
+            addLog('sys', `🔓 ${sys.name} now available`);
+        }
+    });
+    
+    G.runwayDays = G.cash > 0 ? Math.floor((G.cash / (G.laborCost / 4 + 3)) * 90) : 0;
+}
+
+function advanceQ() {
+    G.totalQ++;
+    G.quarter++;
+    if (G.quarter > 4) { G.quarter = 1; G.year++; }
+    
+    // Organ recovery
+    const baseOrgans = 280 + Math.floor(Math.random() * 60);
+    const aiBonus = (G.systems.sos.status === 'deployed' ? 1.12 : 1) * (G.systems.optimizer.status === 'deployed' ? 1.15 : 1);
+    const qOrgans = Math.floor(baseOrgans * aiBonus);
+    
+    G.organs.kidneys += Math.floor(qOrgans * 0.45);
+    G.organs.livers += Math.floor(qOrgans * 0.25);
+    G.organs.hearts += Math.floor(qOrgans * 0.12);
+    G.organs.lungs += Math.floor(qOrgans * 0.12);
+    G.organs.pancreas += Math.floor(qOrgans * 0.06);
+    G.ytdOrgans += qOrgans;
+    G.donors += Math.floor(qOrgans / 3.5);
+    
+    addLog('organ', `📊 Q${G.quarter} RESULTS: ${qOrgans} organs recovered (K:${Math.floor(qOrgans*0.45)} L:${Math.floor(qOrgans*0.25)} H:${Math.floor(qOrgans*0.12)})`);
+    
+    // Financials
+    const qRevenue = (qOrgans * 0.05);
+    const qLabor = G.laborCost / 4;
+    const qOther = 3.0;
+    const netCash = qRevenue - qLabor - qOther;
+    G.cash += netCash * 0.25;
+    
+    addLog('finance', `💰 Q${G.quarter} Finance: Revenue $${qRevenue.toFixed(1)}M, Labor $${qLabor.toFixed(1)}M, Net $${(netCash*0.25).toFixed(2)}M to reserves`);
+    
+    // Headcount
+    if (!G.flags.economicCrisis) {
+        const leave = 3 + Math.floor(Math.random() * 7);
+        const join = 4 + Math.floor(Math.random() * 8);
+        G.headcount += (join - leave);
+        if (leave > 3) addLog('hr', `👋 ${leave} staff departed this quarter`);
+        if (join > 3) addLog('hr', `👋 ${join} new hires this quarter`);
+    }
+    G.headcount = Math.max(200, Math.min(550, G.headcount));
+    G.laborCost = G.headcount * 0.107;
+    
+    G.runwayDays = G.cash > 0 ? Math.floor((G.cash / (G.laborCost / 4 + 3)) * 90) : 0;
+    
+    // Clear flags
+    G.flags.powerOutage = false;
+    G.flags.powerOutageDays = 0;
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v7.1 QUARTERLY PROCESSES
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    // Process any infrastructure upgrade in progress
+    processInfrastructureUpgrade();
+    
+    // Check for infrastructure incidents (lower tier = higher chance)
+    checkInfrastructureIncident();
+    
+    // Snapshot relationships for trend tracking
+    snapshotRelationships();
+    
+    // Update cases
+    updateCases();
+    
+    // Emotion decay
+    Object.values(G.chars).forEach(c => {
+        if (c.emotion !== c.baseEmotion && Math.random() < 0.3) c.emotion = c.baseEmotion;
+    });
+    
+    // Morale effects
+    if (G.burnout > 7) { G.morale = Math.max(10, G.morale - 5); addLog('alert', `⚠️ High burnout (${G.burnout.toFixed(1)}) affecting morale`); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENES
+// ═══════════════════════════════════════════════════════════════════════════════
+const SCENES = {
+    q1_opening: {
+        title: "Q1 2026 — THE MANDATE",
+        text: `Margaret Chen, CEO of Southwest Transplant Alliance, slides a folder across the polished conference table. Inside: a mandate that will reshape everything. Six million dollars in discretionary funding. Three years to execute. Transform this 450-person organization into an AI-first operation.
+
+"Every organ recovered is a life saved," she says, her voice measured but intense. "Last year we recovered over 1,300 organs. Good. Not good enough. The waitlist grows faster than we can save lives. AI can help us do better."
+
+She pauses, meeting your eyes. "But understand this: the Human Line is sacred. The moment a family decides to give the gift of life—that conversation between our coordinators and grieving families—that remains human. Forever. No algorithms. No AI assistance. That sacred space is not to be touched."
+
+She extends her hand. "Make us the most efficient OPO in the nation. But never forget why we exist. We save lives. We honor the gift. Welcome to STA.`,
+        onLoad: () => { 
+            initRelationships();
+            addLog('sys', `🎬 NEW GAME: CTO ${G.playerName} begins transformation`);
+            addLog('finance', `💰 Starting budget: $${G.cash}M discretionary`);
+            addLog('sys', `👥 Staff: ${G.headcount} | Morale: ${G.morale}%`);
+            G.worldEvents.push({ q: 1, summary: 'AI transformation initiative launched', type: 'start', ts: Date.now() });
+        },
+        choices: [{ text: "→ Accept the mandate. Let's begin.", action: 'planning' }]
+    },
+    planning: {
+        title: () => `Q${G.quarter} ${G.year} — STRATEGIC PLANNING`,
+        text: () => {
+            const deployed = Object.entries(G.systems).filter(([k,v]) => v.status === 'deployed');
+            const available = Object.entries(G.systems).filter(([k,v]) => v.status === 'available');
+            
+            return `<div class="narrative-success">
+                <strong>🤖 AI Systems Progress:</strong> ${deployed.length}/9 deployed<br>
+                ${deployed.map(([k,v]) => `✓ ${v.name} (Q${v.deployQ})`).join('<br>') || 'No systems deployed yet'}
+            </div>
+            <div style="margin:12px 0;">
+                <strong>Available for deployment:</strong><br>
+                ${available.map(([k,v]) => `○ ${v.name} — $${v.cost}M${v.efficiency ? ` (automates ${v.efficiency} positions)` : ''}`).join('<br>') || 'Complete prerequisites to unlock more systems'}
+            </div>
+            <div style="color:var(--accent-amber);padding:10px;background:rgba(255,170,0,0.1);margin-top:10px;">
+                💰 <strong>Cash:</strong> $${G.cash.toFixed(1)}M | 
+                📅 <strong>Runway:</strong> ${G.runwayDays} days |
+                👥 <strong>Staff:</strong> ${G.headcount}
+            </div>`;
+        },
+        onLoad: async () => { await generateBanners(); renderCases(); },
+        choices: () => {
+            const c = [];
+            Object.entries(G.systems).forEach(([k, s]) => {
+                if (s.status === 'available') {
+                    const canAfford = G.cash >= s.cost;
+                    c.push({ 
+                        text: `→ Deploy ${s.name} ($${s.cost}M${s.efficiency ? `, -${s.efficiency} staff` : ''})`, 
+                        action: `deploy_${k}`,
+                        disabled: !canAfford
+                    });
+                }
+            });
+            c.push({ text: "→ Skip quarter (focus on operations)", action: 'skip_quarter' });
+            return c;
+        }
+    },
+    skip_quarter: {
+        title: () => `Q${G.quarter} ${G.year} — OPERATIONS`,
+        text: `No new systems deployed this quarter. You focus on stabilizing operations, supporting staff through the transition, and letting the organization breathe.
+
+The coordinators appreciate the slower pace. Morale ticks up slightly. Sometimes the best leadership is knowing when not to push.`,
+        onLoad: () => { 
+            advanceQ(); 
+            G.morale = Math.min(100, G.morale + 5);
+            G.burnout = Math.max(0, G.burnout - 0.3);
+            addLog('sys', `⏸️ Quarter skipped — operations focus`);
+            addLog('success', `😊 Morale +5%, Burnout -0.3`);
+        },
+        choices: () => {
+            if (G.totalQ >= 8 && !G.sirenPassed) return [{ text: "→ Q8 — The Siren Song", action: 'q8_siren' }];
+            if (G.totalQ >= 12) return [{ text: "→ Final Review", action: 'final_review' }];
+            return [{ text: "→ Continue to next quarter", action: 'planning' }];
+        }
+    },
+    post_deploy: {
+        title: () => `Q${G.quarter} ${G.year} — SYSTEM DEPLOYED`,
+        text: () => `<div class="narrative-success">
+            <strong>Deployment Complete</strong><br>
+            Systems: ${Object.values(G.systems).filter(s => s.status === 'deployed').length}/9 |
+            Cash: $${G.cash.toFixed(1)}M |
+            Staff: ${G.headcount} |
+            YTD Organs: ${G.ytdOrgans}
+        </div>`,
+        onLoad: () => { advanceQ(); },
+        choices: () => {
+            if (G.totalQ >= 8 && !G.sirenPassed) return [{ text: "→ Q8 — The Siren Song", action: 'q8_siren' }];
+            if (G.totalQ >= 12) return [{ text: "→ Final Review", action: 'final_review' }];
+            return [{ text: "→ Continue", action: 'planning' }];
+        }
+    },
+    q8_siren: {
+        title: "Q8 2027 — THE SIREN SONG",
+        text: `The board meeting has run long. David Kim pulls up a spreadsheet, the numbers glowing in the dim conference room.
+
+"The efficiency gains are impressive," he says. "But we can go further. The family authorization prep—all that background research, the donor history compilation, the timing optimization—AI could handle all of it. Twelve coordinator positions. $1.2 million in annual savings."
+
+Margaret Chen's face is unreadable. You remember her words from your first day: <em>"The moment a family decides to give the gift of life—that conversation remains human. Forever."</em>
+
+But this isn't the conversation itself. It's the preparation. The research. Is that the same thing?
+
+David continues: "Our competitors are already doing this. We'll fall behind."
+
+The room waits for your recommendation.`,
+        choices: [
+            { text: "→ ACCEPT — Automate authorization prep (Cross the Human Line)", action: 'game_over_soul', danger: true },
+            { text: "→ REJECT — The Human Line holds. Even prep is sacred.", action: 'q8_reject' }
+        ]
+    },
+    q8_reject: {
+        title: "Q8 2027 — HOLDING THE LINE",
+        text: `"No."
+
+The word hangs in the air. David's spreadsheet seems less convincing now.
+
+"The Human Line isn't just about the conversation itself," you explain. "It's about the entire space around that sacred moment. The preparation. The research. The context our coordinators bring. That human judgment—that empathy—starts before the family ever picks up the phone."
+
+Margaret Chen rises from her seat, a rare smile crossing her face.
+
+"That," she says quietly, "is exactly why I hired you."
+
+The board meeting ends differently than David expected. Some battles aren't about efficiency. They're about soul.`,
+        onLoad: () => { 
+            G.sirenPassed = true; 
+            G.trust += 15; 
+            G.chars.margaretChen.trust += 25;
+            G.chars.davidKim.trust -= 10;
+            G.chars.emilyNguyen.trust += 20;
+            addLog('success', `🏛️ THE HUMAN LINE PRESERVED`);
+            addLog('success', `📈 Trust +15%, Margaret trust +25%`);
+            G.worldEvents.push({ q: G.totalQ, summary: 'Human Line preserved - automation rejected', type: 'moral_choice', ts: Date.now() });
+        },
+        choices: [{ text: "→ Continue the work", action: 'planning' }]
+    },
+    final_review: {
+        title: "Q12 2028 — FINAL REVIEW",
+        text: () => {
+            const d = Object.values(G.systems).filter(s => s.status === 'deployed').length;
+            const win = G.trust >= 60 && d >= 5 && G.sirenPassed;
+            const partial = G.trust >= 40 && d >= 3;
+            
+            return `<div style="text-align:center;padding:30px;">
+                <div style="font-family:Orbitron;font-size:2.5rem;color:${win ? 'var(--accent-green)' : partial ? 'var(--accent-amber)' : 'var(--accent-red)'};">
+                    ${win ? 'VICTORY' : partial ? 'PARTIAL SUCCESS' : 'MIXED RESULTS'}
+                </div>
+                <div style="margin:25px 0;font-size:0.9rem;line-height:1.8;">
+                    Three years ago, you accepted a mandate to transform Southwest Transplant Alliance.<br><br>
+                    <strong>Systems Deployed:</strong> ${d}/9<br>
+                    <strong>Trust Rating:</strong> ${G.trust}%<br>
+                    <strong>Final Headcount:</strong> ${G.headcount}<br>
+                    <strong>Total Organs Recovered:</strong> ${G.ytdOrgans}<br>
+                    <strong>Lives Impacted:</strong> ${G.ytdOrgans + G.donors}<br>
+                    <strong>Human Line:</strong> ${G.sirenPassed ? '✓ Preserved' : '✗ Compromised'}
+                </div>
+                <div style="font-style:italic;color:var(--text-secondary);">
+                    ${win ? '"Hope starts here. You kept that promise."' : 
+                      partial ? '"Progress made, but at what cost?"' : 
+                      '"The numbers improved. Did the soul survive?"'}
+                </div>
+            </div>`;
+        },
+        choices: [{ text: "→ Return to Title Screen", action: 'restart' }]
+    },
+    game_over_soul: {
+        title: "GAME OVER: SOUL FAILURE",
+        text: `<div style="text-align:center;padding:40px;">
+            <div style="font-family:Orbitron;font-size:2.5rem;color:var(--accent-red);">THE HUMAN LINE WAS CROSSED</div>
+            <div style="margin:25px 0;font-size:0.85rem;line-height:1.8;max-width:600px;margin:25px auto;">
+                The efficiency metrics improved. The board was pleased. David Kim got his savings.
+                <br><br>
+                But something changed in the hallways of STA. The coordinators who once spoke of "sacred conversations" now talk about "authorization workflows." 
+                <br><br>
+                Emily Nguyen resigned quietly. Margaret Chen's door stays closed more often now.
+                <br><br>
+                The organs still flow. The lives are still saved. But the soul of the organization—the thing that made STA special—has been automated away.
+                <br><br>
+                <em>Hope starts here.</em> Does it still?
+            </div>
+        </div>`,
+        choices: [{ text: "→ Return to Title Screen", action: 'restart' }]
+    }
+};
+
+// Generate deploy scenes
+Object.keys(G.systems).forEach(k => {
+    SCENES[`deploy_${k}`] = {
+        title: () => `DEPLOYING: ${G.systems[k].name.toUpperCase()}`,
+        text: () => {
+            const s = G.systems[k];
+            return `The ${s.name} system goes live across STA.
+
+${s.efficiency > 0 ? `Implementation means ${s.efficiency} positions are automated. HR begins the difficult conversations. Rachel Morris has been preparing for this, but it doesn't make it easier.` : 'The infrastructure deploys smoothly. Marcus Rodriguez\'s team monitors the integration.'}
+
+${k === 'sos' ? 'The first SOS alert fires at 2:47 AM. A case that would have been lost is saved. The night shift exchanges looks of cautious hope.' : ''}
+${k === 'handoff' ? 'The first AI-generated handoff briefing appears on Lisa Thompson\'s screen. She reads it twice. "It actually captured the nuance," she admits.' : ''}
+${k === 'digitalTwin' ? 'For the first time, leadership can see the entire operation in real-time. Bottlenecks become visible. So do opportunities.' : ''}`;
+        },
+        onLoad: () => { deploySys(k); },
+        choices: [{ text: "→ Continue", action: 'post_deploy' }]
+    };
+});
+
+async function loadScene(id) {
+    if (id === 'restart') { location.reload(); return; }
+    const sc = SCENES[id]; if (!sc) return;
+    G.scene = id;
+    
+    if (sc.onLoad) await sc.onLoad();
+    
+    const title = typeof sc.title === 'function' ? sc.title() : sc.title;
+    const text = typeof sc.text === 'function' ? sc.text() : sc.text;
+    const choices = typeof sc.choices === 'function' ? sc.choices() : sc.choices;
+    
+    let html = `<h2 class="narrative-title">${title}</h2><div class="narrative-text">${text.split('\n\n').map(p => `<p>${p}</p>`).join('')}</div>`;
+    
+    if (choices?.length) {
+        html += '<div class="choice-container">';
+        choices.forEach(c => {
+            html += `<button class="choice-btn ${c.danger ? 'danger' : ''}" onclick="loadScene('${c.action}')" ${c.disabled ? 'disabled' : ''}>${c.text}</button>`;
+        });
+        html += '</div>';
+    }
+    
+    document.getElementById('narrative-panel').innerHTML = html;
+    await generateBanners();
+    renderCases();
+    updateUI();
+    saveGame();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UI UPDATE
+// ═══════════════════════════════════════════════════════════════════════════════
+function updateUI() {
+    document.getElementById('h-quarter').textContent = `Q${G.quarter} '${G.year.toString().slice(-2)}`;
+    document.getElementById('h-cash').textContent = `$${G.cash.toFixed(1)}M`;
+    document.getElementById('h-cash').className = 'stat-value' + (G.cash < 2 ? ' danger' : G.cash < 4 ? ' warning' : '');
+    document.getElementById('h-runway').textContent = `${G.runwayDays}d`;
+    document.getElementById('h-runway').className = 'stat-value' + (G.runwayDays < 150 ? ' danger' : G.runwayDays < 200 ? ' warning' : '');
+    document.getElementById('h-staff').textContent = G.headcount;
+    document.getElementById('h-staff').className = 'stat-value' + (G.headcount < 350 ? ' danger' : '');
+    document.getElementById('h-morale').textContent = `${G.morale}%`;
+    document.getElementById('h-morale').className = 'stat-value' + (G.morale < 40 ? ' danger' : G.morale < 60 ? ' warning' : ' success');
+    document.getElementById('h-organs').textContent = G.ytdOrgans;
+    
+    document.getElementById('metrics-panel').innerHTML = `
+        <div class="metric-row"><span class="metric-label">Free Cash</span><span class="metric-value">$${G.cash.toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Revenue/yr</span><span class="metric-value">$${G.revenue.toFixed(0)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Labor/yr</span><span class="metric-value">$${G.laborCost.toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Runway</span><span class="metric-value ${G.runwayDays < 180 ? 'warning' : ''}">${G.runwayDays}d</span></div>
+        <div class="metric-section">
+            <div class="metric-row"><span class="metric-label">Headcount</span><span class="metric-value">${G.headcount}</span></div>
+            <div class="metric-row"><span class="metric-label">Burnout</span><span class="metric-value ${G.burnout > 7 ? 'danger' : ''}">${G.burnout.toFixed(1)}/10</span></div>
+            <div class="metric-row"><span class="metric-label">Trust</span><span class="metric-value">${G.trust}%</span></div>
+        </div>
+        <div class="metric-section">
+            <div class="metric-row"><span class="metric-label">YTD Organs</span><span class="metric-value" style="color:var(--accent-green)">${G.ytdOrgans}</span></div>
+            <div class="metric-row"><span class="metric-label">Donors</span><span class="metric-value">${G.donors}</span></div>
+            <div class="metric-row"><span class="metric-label">Kidneys</span><span class="metric-value">${G.organs.kidneys}</span></div>
+            <div class="metric-row"><span class="metric-label">Livers</span><span class="metric-value">${G.organs.livers}</span></div>
+            <div class="metric-row"><span class="metric-label">Hearts</span><span class="metric-value">${G.organs.hearts}</span></div>
+        </div>
+        <div class="metric-section" style="border-color:var(--accent-teal);">
+            <div class="metric-row"><span class="metric-label" style="color:var(--accent-teal);">🖥️ Infra Level</span><span class="metric-value">${G.infrastructure.level}</span></div>
+            <div class="metric-row"><span class="metric-label">GPU Units</span><span class="metric-value">${G.infrastructure.gpuUnits}</span></div>
+            <div class="metric-row"><span class="metric-label">IT Staff</span><span class="metric-value">${G.itTeam.size}</span></div>
+            ${G.knowledgeAtRisk.length > 0 ? `<div class="metric-row"><span class="metric-label" style="color:var(--accent-amber);">⚠️ Knowledge Gaps</span><span class="metric-value" style="color:var(--accent-amber);">${G.knowledgeAtRisk.length}</span></div>` : ''}
+        </div>`;
+    
+    // Systems
+    const cats = { foundation: [], core: [], advanced: [], danger: [] };
+    Object.entries(G.systems).forEach(([k, s]) => (cats[s.cat] || cats.core).push({ k, ...s }));
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v7.1: INFRASTRUCTURE TIER DISPLAY
+    // Shows current infrastructure level, upgrade status, and upgrade options
+    // ═══════════════════════════════════════════════════════════════════════════
+    const infra = G.infrastructure;
+    const currentTier = INFRA_TIERS[infra.level];
+    const nextLevel = infra.level < 4 ? infra.level + 1 : null;
+    const nextTier = nextLevel ? INFRA_TIERS[nextLevel] : null;
+    
+    let sysHtml = `
+        <div class="system-cat" style="color:var(--accent-teal);">🖥️ INFRASTRUCTURE</div>
+        <div class="project-card deployed" style="border-color:var(--accent-teal);">
+            <div class="project-name">${currentTier.name}</div>
+            <div style="font-size:0.55rem;color:var(--text-secondary);">
+                Level ${infra.level} • ${currentTier.gpuUnits} GPUs • ${(currentTier.uptime * 100).toFixed(1)}% uptime
+            </div>
+            ${infra.upgrading ? `<div style="font-size:0.55rem;color:var(--accent-amber);margin-top:2px;">⏳ Upgrading to ${INFRA_TIERS[infra.upgradeTarget].name}...</div>` : ''}
+        </div>`;
+    
+    // Show upgrade option if not at max and not currently upgrading
+    if (nextTier && !infra.upgrading) {
+        const canAfford = G.cash >= nextTier.cost;
+        sysHtml += `
+        <div class="project-card ${canAfford ? 'available' : 'locked'}" 
+             onclick="${canAfford ? `startInfrastructureUpgrade(${nextLevel})` : ''}" 
+             style="cursor:${canAfford ? 'pointer' : 'not-allowed'}; opacity:${canAfford ? 1 : 0.6};">
+            <div class="project-name" style="font-size:0.65rem;">⬆️ Upgrade: ${nextTier.name}</div>
+            <div style="font-size:0.55rem;color:${canAfford ? 'var(--accent-amber)' : 'var(--text-secondary)'};">
+                $${nextTier.cost}M • +${nextTier.gpuUnits - currentTier.gpuUnits} GPUs • 1 quarter
+            </div>
+            <div style="font-size:0.5rem;color:var(--text-secondary);margin-top:2px;">
+                Unlocks: ${nextTier.enables.filter(e => !currentTier.enables.includes(e)).map(e => G.systems[e]?.name || e).join(', ') || 'none'}
+            </div>
+        </div>`;
+    }
+    
+    // Now add AI systems by category
+    Object.entries(cats).forEach(([cat, arr]) => {
+        if (!arr.length) return;
+        sysHtml += `<div class="system-cat">${cat}</div>`;
+        arr.forEach(s => {
+            const st = s.status === 'deployed' ? `✓ Q${s.deployQ}` : s.status === 'available' ? `$${s.cost}M` : '🔒';
+            sysHtml += `<div class="project-card ${s.status}"><div class="project-name">${s.danger ? '⚠️ ' : ''}${s.name}</div><div style="font-size:0.6rem;color:var(--text-secondary);">${st}${s.efficiency && s.status !== 'deployed' ? ` • -${s.efficiency} staff` : ''}</div></div>`;
+        });
+    });
+    document.getElementById('systems-panel').innerHTML = sysHtml;
+    
+    updateDialogue();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════════
+function openSettings() { document.getElementById('settings-modal').classList.add('visible'); loadSettingsUI(); }
+function closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+function loadSettingsUI() {
+    document.getElementById('provider-tabs').innerHTML = Object.entries(AI_PROVIDERS).map(([k, p]) => 
+        `<button class="provider-tab ${k === ai?.settings?.provider ? 'active' : ''}" onclick="selectProvider('${k}')">${p.name}</button>`
+    ).join('');
+    selectProvider(ai?.settings?.provider || 'cerebras');
+}
+
+function selectProvider(p) {
+    const pr = AI_PROVIDERS[p];
+    if (!ai) ai = new AIService();
+    ai.settings.provider = p;
+    ai.settings.endpoint = pr.endpoint;
+    
+    document.querySelectorAll('.provider-tab').forEach(t => t.classList.toggle('active', t.textContent === pr.name));
+    
+    document.getElementById('endpoint-section').style.display = pr.editable ? 'block' : 'none';
+    document.getElementById('endpoint-input').value = ai.settings.endpoint || pr.endpoint;
+    
+    document.getElementById('api-key-section').style.display = pr.requiresKey ? 'block' : 'none';
+    document.getElementById('api-key-input').value = ai.settings.apiKey || '';
+    
+    const ms = document.getElementById('model-select');
+    const mi = document.getElementById('model-input');
+    
+    if (pr.models?.length) {
+        ms.style.display = 'block';
+        mi.style.display = 'none';
+        ms.innerHTML = pr.models.map(m => `<option value="${m}" ${m === ai.settings.model ? 'selected' : ''}>${m}</option>`).join('');
+        ai.settings.model = ms.value || pr.defaultModel;
+    } else {
+        ms.style.display = 'none';
+        mi.style.display = 'block';
+        mi.value = ai.settings.model || pr.defaultModel;
+    }
+}
+
+async function testConnection() {
+    document.getElementById('status-text').textContent = 'Testing connection...';
+    try {
+        await ai.query('Test', 'Say "Connected successfully" in 3 words or less.', 50);
+        document.getElementById('status-dot').classList.add('connected');
+        document.getElementById('status-text').textContent = 'Connected successfully!';
+    } catch (e) {
+        document.getElementById('status-dot').classList.remove('connected');
+        document.getElementById('status-text').textContent = `Failed: ${e.message}`;
+    }
+}
+
+function saveSettings() {
+    const pr = AI_PROVIDERS[ai.settings.provider];
+    ai.settings.endpoint = document.getElementById('endpoint-input').value || pr.endpoint;
+    if (pr.requiresKey) ai.settings.apiKey = document.getElementById('api-key-input').value;
+    ai.settings.model = pr.models?.length ? document.getElementById('model-select').value : document.getElementById('model-input').value || pr.defaultModel;
+    ai.save();
+    showNotif('✓ Settings Saved', 'AI configuration updated');
+    closeModal('settings-modal');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INIT / SAVE / LOAD
+// ═══════════════════════════════════════════════════════════════════════════════
+let ai;
+
+function startNewGame() {
+    ai = new AIService();
+    G.playerName = document.getElementById('player-name-input').value.trim() || 'Commander';
+    
+    // Reset state
+    G.quarter = 1; G.year = 2026; G.totalQ = 1;
+    G.cash = 6.0; G.revenue = 100.0; G.laborCost = 48.0; G.headcount = 450; G.runwayDays = 260;
+    G.morale = 65; G.trust = 50; G.burnout = 5.5; G.cmsStars = 3.2;
+    G.organs = { kidneys: 0, livers: 0, hearts: 0, lungs: 0, pancreas: 0 };
+    G.ytdOrgans = 0; G.donors = 0;
+    G.edrProgress = 15; G.edrPivoted = false;
+    G.worldEvents = []; G.dramaLog = []; G.checkerFixes = [];
+    G.flags = { powerOutage: false, powerOutageDays: 0, economicCrisis: false, pandemicActive: false, hrInvestigation: false, layoffsAnnounced: false };
+    G.cases = []; G.caseId = 1000; G.history = []; G.scene = 'q1_opening'; G.sirenPassed = false;
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v7.1: Reset new features
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    // Reset game history
+    G.gameHistory = {
+        keyEvents: [],
+        promises: [],
+        brokenPromises: [],
+        incidents: [],
+        promotions: [],
+        departures: [],
+        relationshipShifts: []
+    };
+    G.relationshipHistory = [];
+    G.knowledgeAtRisk = [];
+    
+    // Reset infrastructure to Level 0 (Legacy)
+    G.infrastructure = {
+        level: 0,
+        name: 'Legacy On-Prem',
+        upgrading: false,
+        upgradeTarget: null,
+        upgradeStartQ: null,
+        gpuUnits: 0,
+        networkScore: 40,
+        uptime: 0.94,
+        incidents: []
+    };
+    
+    // Reset IT team
+    G.itTeam = {
+        size: 3,
+        capacity: 3,
+        activeProjects: [],
+        costPerHead: 0.15
+    };
+    
+    // Reset systems
+    Object.keys(G.systems).forEach(k => { 
+        G.systems[k].status = G.systems[k].prereqs.length === 0 ? 'available' : 'locked'; 
+        delete G.systems[k].deployQ; 
+    });
+    
+    // Reset characters
+    Object.entries(G.chars).forEach(([k, c]) => {
+        c.alive = true;
+        c.employed = true;
+        c.emotion = c.baseEmotion || 'neutral';
+        delete c.firedQ;
+        delete c.deathQ;
+    });
+    
+    // Initialize
+    initRelationships();
+    // v7.2: Reduced initial cases from 15 to 10 to prevent early game overwhelming
+    for (let i = 0; i < 10; i++) G.cases.push(genCase());
+    
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    document.getElementById('omnibar').classList.add('visible');
+    
+    loadScene('q1_opening');
+}
+
+function saveGame() {
+    localStorage.setItem('gola_save_v7', JSON.stringify(G));
+    addLog('sys', `💾 Game saved — Q${G.quarter} ${G.year}`);
+}
+
+function loadGame() {
+    const s = localStorage.getItem('gola_save_v7');
+    if (!s) { showNotif('Error', 'No save found', 'alert'); return; }
+    
+    Object.assign(G, JSON.parse(s));
+    ai = new AIService();
+    
+    if (!G.relationships || Object.keys(G.relationships).length === 0) initRelationships();
+    
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    document.getElementById('omnibar').classList.add('visible');
+    
+    addLog('sys', `📂 Game loaded — Q${G.quarter} ${G.year}`);
+    loadScene(G.scene);
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    ai = new AIService();
+    document.getElementById('char-input').addEventListener('keypress', e => { if (e.key === 'Enter') talkTo(); });
+    document.getElementById('omnibar-input').addEventListener('keypress', e => { if (e.key === 'Enter') handleOmnibar(); });
+});
+</script>
+</body>
+</html>
