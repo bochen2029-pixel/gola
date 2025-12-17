@@ -1,1 +1,87 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GOLA — GitHub Actions: Docker Build & Publish
+# Automatically builds and publishes Docker image when you push to main branch
+# ═══════════════════════════════════════════════════════════════════════════════
 
+name: Docker Build & Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - 'Dockerfile'
+      - 'nginx.conf'
+      - 'docker-compose.yml'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      # ─────────────────────────────────────────────────────────────────────────
+      # CHECKOUT: Get the code
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # ─────────────────────────────────────────────────────────────────────────
+      # DOCKER: Set up buildx for multi-platform builds
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      # ─────────────────────────────────────────────────────────────────────────
+      # AUTH: Login to GitHub Container Registry
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      # ─────────────────────────────────────────────────────────────────────────
+      # METADATA: Generate tags and labels
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=v7.2
+            type=sha,prefix=
+      
+      # ─────────────────────────────────────────────────────────────────────────
+      # BUILD & PUSH: Build and publish the image
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+      
+      # ─────────────────────────────────────────────────────────────────────────
+      # SUMMARY: Print image info
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Image digest
+        run: echo "Image published with digest ${{ steps.meta.outputs.digest }}"
